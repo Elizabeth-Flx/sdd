@@ -1,0 +1,37 @@
+# VScode specific ignore's
+
+.vscode/*
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# File endings to ignore
+*.log
+*.tmp
+*.bak
+*.csv
+*.tsv
+*.sqlite3
+*.db
+*.h5ad
+*.bed
+*.gz
+*.zip
+*.tar
+*.rar
+
+# Conda environments
+env/
+venv/
+.conda/
+.venv/
+*.yml
+*.yaml
+
+
+# Folders to ignore
+
+tmp/
+temp/
