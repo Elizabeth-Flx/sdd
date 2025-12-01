@@ -27,7 +27,6 @@ env/
 venv/
 .conda/
 .venv/
-*.yml
 *.yaml
 
 
