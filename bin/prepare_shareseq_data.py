@@ -1,29 +1,15 @@
 #! /usr/bin/env python3
 
-from pprint import pp
-import tangram
 import scanpy as sc
 import numpy as np
-import gzip
-import os
-from scipy.sparse import csr_matrix, coo_matrix
 import anndata as ad
 import pandas as pd
-from shapely.geometry import Polygon
-import matplotlib.pyplot as plt
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.linear_model import LinearRegression
 import muon as mu
-from scipy.io import mmread
-from muon import atac as ac
-import seaborn as sns
+from muon import atac
 from pathlib import Path
 import sys
 import re
 import argparse
-
-from torch import T
-
 
 
 def get_rna_anndata(df_rna_counts, df_celltype, log_file=None):
@@ -72,18 +58,18 @@ def filter_rna_anndata(adata_rna, min_cells=2, min_genes=100, n_top_genes = 2000
     )
 
     # Filter data
-    sc.pp.filter_cells(adata_rna, min_genes=min_genes)
-    sc.pp.filter_genes(adata_rna, min_cells=min_cells)
+    sc.pp.filter_cells(adata_rna, min_genes=min_genes) # pyright: ignore[reportCallIssue]
+    sc.pp.filter_genes(adata_rna, min_cells=min_cells) # pyright: ignore[reportCallIssue]
 
     # Saving count data
     adata_rna.layers["counts"] = adata_rna.X.copy()
 
     if normalize:
-        sc.pp.normalize_total(adata_rna)
+        sc.pp.normalize_total(adata_rna) # pyright: ignore[reportCallIssue]
     if log:
         sc.pp.log1p(adata_rna)
     if highly_variable:
-        sc.pp.highly_variable_genes(adata_rna, n_top_genes=n_top_genes, flavor=flavor)
+        sc.pp.highly_variable_genes(adata_rna, n_top_genes=n_top_genes, flavor=flavor) # pyright: ignore[reportCallIssue]
     if pca:
         sc.tl.pca(adata_rna)
 
@@ -150,21 +136,22 @@ def add_metrics_atac(atac, fragment_min = 165, fragment_max = 12000, nucleosome_
             f.write("Nucleosome signal filter value counts:\n")
             f.write(str(atac.obs["nuc_signal_filter"].value_counts()))
             f.write("\n")
-    pp = atac.copy()
+    pp_data = atac.copy()
 
     if log_file is not None:
         with open(log_file, "a") as f:
-            f.write(f"Total number of cells: {pp.n_obs}\n")
+            f.write(f"Total number of cells: {pp_data.n_obs}\n")
             
     mu.pp.filter_obs(
-        pp,
+        pp_data,
         "total_fragment_counts",
         lambda x:  (x >= fragment_min) &(x <= fragment_max),  # parameter for filtering
     )
     if log_file is not None:
         with open(log_file, "a") as f:
-            f.write(f"Number of cells after filtering on total_fragment_counts: {pp.n_obs}\n")
-    return pp
+            f.write(f"Number of cells after filtering on total_fragment_counts: {pp_data.n_obs}\n")
+            
+    return pp_data
 
 
 
@@ -210,12 +197,12 @@ if __name__ == "__main__":
 
     atac = process_atac_data(df_celltype, atac, barcodes, peaks)
     mu.atac.tl.locate_fragments(atac, str(ATAC_FRAGMENTS_FILE))
-    pp = add_metrics_atac(atac, log_file=log_file)
+    pp_data = add_metrics_atac(atac, log_file=log_file)
     
 
     # Write data
     ad_rna_path = args.output_dir+"/c_sc_ad.h5ad"
     adata_rna.write_h5ad(ad_rna_path)
     atac_path = args.output_dir+"/c_atac_ad.h5ad"
-    pp.write_h5ad(atac_path)
-        
+    pp_data.write_h5ad(atac_path)
+    
