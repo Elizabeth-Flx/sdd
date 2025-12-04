@@ -34,3 +34,6 @@ venv/
 
 tmp/
 temp/
+data/
+scripts_other/
+*.txt
