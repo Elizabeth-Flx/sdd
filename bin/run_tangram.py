@@ -53,3 +53,7 @@ if __name__ == "__main__":
     ad_map, annotation_list = run_tangram(ad_rna, ad_sp, num_epochs=args.num_epochs, device=args.device)
 
     # TODO: Continue here
+
+    # Save 
+    output_path = f"{args.output_dir}/tangram_{args.tool_name}.h5ad"
+    ad_map.write_h5ad(output_path)
