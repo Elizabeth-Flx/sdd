@@ -5,12 +5,22 @@ import numpy as np
 import anndata as ad
 import pandas as pd
 import muon as mu
-from muon import atac
 from pathlib import Path
 import sys
 import re
 import argparse
+import genetic_annotation as ga
 
+
+## Set constants
+MIN_CELLS = 2
+MIN_GENES = 100
+N_TOP_GENES = 2000
+FLAVOR = "seurat_v3"
+FRAGMENT_MIN = 165
+FRAGMENT_MAX = 12000
+NUCLEOSOME_SIGNAL_THRESHOLD = 2
+NUCLEOSOME_SIGNAL = 2000000
 
 def get_rna_anndata(df_rna_counts, df_celltype, log_file=None):
     df_rna_counts.columns = df_rna_counts.columns.str.replace(',', '.', regex=False)
@@ -36,7 +46,7 @@ def get_rna_anndata(df_rna_counts, df_celltype, log_file=None):
     return adata_rna
 
 
-def filter_rna_anndata(adata_rna, min_cells=2, min_genes=100, n_top_genes = 2000, flavor="seurat_v3", qc_metrics=True, normalize=True, log=True, highly_variable=True, pca = True, log_file=None):
+def filter_rna_anndata(adata_rna, log_file=None):
 
     mito_count = adata_rna.var_names.str.startswith("Mt-").sum()
     # Write mito count to log file
@@ -45,39 +55,30 @@ def filter_rna_anndata(adata_rna, min_cells=2, min_genes=100, n_top_genes = 2000
             f.write("FILTERING RNA ANNDATA\n")
             f.write(f"Mitochondrial genes count: {mito_count}\n")
             # Write parameters used for filtering
-            f.write(f"min_cells: {min_cells}\n\
-                        min_genes: {min_genes}\n\
-                        calculate qc_metrics: {qc_metrics}\n\
-                        normalize counts: {normalize}\n\
-                        logarithm (log10): {log}\n\
-                        highly_variable: {highly_variable}\n")
+            f.write(f"min_cells: {MIN_CELLS}\n\
+                        min_genes: {MIN_GENES}\n")
 
-    if qc_metrics:
-        sc.pp.calculate_qc_metrics(
+    
+    sc.pp.calculate_qc_metrics(
         adata_rna, inplace=True, log1p=True
     )
 
     # Filter data
-    sc.pp.filter_cells(adata_rna, min_genes=min_genes) # pyright: ignore[reportCallIssue]
-    sc.pp.filter_genes(adata_rna, min_cells=min_cells) # pyright: ignore[reportCallIssue]
+    sc.pp.filter_cells(adata_rna, min_genes=MIN_GENES) # pyright: ignore[reportCallIssue]
+    sc.pp.filter_genes(adata_rna, min_cells=MIN_CELLS) # pyright: ignore[reportCallIssue]
 
     # Saving count data
     adata_rna.layers["counts"] = adata_rna.X.copy()
-
-    if normalize:
-        sc.pp.normalize_total(adata_rna) # pyright: ignore[reportCallIssue]
-    if log:
-        sc.pp.log1p(adata_rna)
-    if highly_variable:
-        sc.pp.highly_variable_genes(adata_rna, n_top_genes=n_top_genes, flavor=flavor) # pyright: ignore[reportCallIssue]
-    if pca:
-        sc.tl.pca(adata_rna)
+    sc.pp.normalize_total(adata_rna) # pyright: ignore[reportCallIssue]
+    sc.pp.log1p(adata_rna)
+    sc.pp.highly_variable_genes(adata_rna, n_top_genes=N_TOP_GENES, flavor=FLAVOR) # pyright: ignore[reportCallIssue]
+    sc.tl.pca(adata_rna)
 
     return adata_rna
 
 
 
-def process_atac_data(celltype, atac, barcodes, peaks, ):
+def process_atac_data(celltype, atac, barcodes, peaks):
     atac.obs["barcode"] = barcodes[0].values
     peaks["peak_id"] = peaks["chrom"] + ":" + peaks["start"].astype(str) + "-" + peaks["end"].astype(str)
     peaks.set_index("peak_id", inplace=True)
@@ -107,7 +108,7 @@ def process_atac_data(celltype, atac, barcodes, peaks, ):
     return atac
 
 
-def add_metrics_atac(atac, fragment_min = 165, fragment_max = 12000, nucleosome_signal_threshold=2, nucleosome_signal = 2000000,  log_file=None):
+def add_metrics_atac(atac, log_file=None):
     # Calculate general qc metrics using scanpy
     sc.pp.calculate_qc_metrics(atac, percent_top=None, log1p=False, inplace=True)
 
@@ -123,11 +124,11 @@ def add_metrics_atac(atac, fragment_min = 165, fragment_max = 12000, nucleosome_
     atac.obs["log_total_fragment_counts"] = np.log10(atac.obs["total_fragment_counts"])
     # Calculate the nucleosome signal across cells
     # set n=10e3*atac.n_obs for rough estimate but faster run time
-    mu.atac.tl.nucleosome_signal(atac, n=nucleosome_signal)
+    mu.atac.tl.nucleosome_signal(atac, n=NUCLEOSOME_SIGNAL)
 
     # Add group labels for above and below the nucleosome signal threshold
     atac.obs["nuc_signal_filter"] = [
-        "NS_FAIL" if ns > nucleosome_signal_threshold else "NS_PASS"
+        "NS_FAIL" if ns > NUCLEOSOME_SIGNAL_THRESHOLD else "NS_PASS"
         for ns in atac.obs["nucleosome_signal"]
     ]
 
@@ -145,25 +146,78 @@ def add_metrics_atac(atac, fragment_min = 165, fragment_max = 12000, nucleosome_
     mu.pp.filter_obs(
         pp_data,
         "total_fragment_counts",
-        lambda x:  (x >= fragment_min) &(x <= fragment_max),  # parameter for filtering
+        lambda x:  (x >= FRAGMENT_MIN) &(x <= FRAGMENT_MAX),  # parameter for filtering
     )
+    mu.pp.filter_var(pp_data, "n_cells_by_counts", lambda x: x >= MIN_CELLS)
     if log_file is not None:
         with open(log_file, "a") as f:
-            f.write(f"Number of cells after filtering on total_fragment_counts: {pp_data.n_obs}\n")
+            f.write(f"Number of cells after filtering on total_fragment_counts & n_cells_by_counts: {pp_data.n_obs}\n")
             
     return pp_data
 
 
+def get_atac_genes(adata_rna, atac, input_dir):
+    # Define the GTF URL
+    gtf_url = "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M10/gencode.vM10.annotation.gtf.gz"
+
+    # Load and process the genes, excluding chrY
+    try:
+        gene_coords_gencode = ga.load_gencode_gtf_genes(gtf_url, feature_type='gene', exclude_chroms=['chrY'])
+    except Exception as e:
+        print(f"Failed to load or process GTF: {e}")
+
+    gene_coords_gencode = gene_coords_gencode[~gene_coords_gencode["chrom"].str.contains("chrY")]
+    common_genes_gencode = adata_rna.var_names.intersection(gene_coords_gencode.index)
+    adata_rna_annotated = adata_rna[:, list(common_genes_gencode)].copy()
+        
+    gene_coords_gencode_reset = gene_coords_gencode.reset_index()
+
+    gene_coords_gencode_filtered = (
+        gene_coords_gencode_reset
+        .loc[gene_coords_gencode_reset['gene_name'].isin(common_genes_gencode)]
+        .groupby(['gene_name', 'chrom'])
+        .agg({
+            'start': 'min',
+            'end': 'max',
+            'Strand': 'first',
+            'gene_ids': 'first'
+        })
+        .reset_index()
+    )
+
+    gene_coords_gencode_filtered = gene_coords_gencode_filtered[
+        ~((gene_coords_gencode_filtered['gene_name'] == 'Fth1') &
+        (gene_coords_gencode_filtered['chrom'] == 'chr8'))
+    ]
+
+    gene_coords_gencode_filtered = gene_coords_gencode_filtered.set_index('gene_name')
+
+    mdata = mu.MuData({'rna': adata_rna_annotated, 'atac': atac})
+    mu.atac.tl.initialise_default_files(mdata, path=input_dir)
+    adata_atac_genes = mu.atac.tl.count_fragments_features(
+        mdata,
+        features=gene_coords_gencode_filtered,
+        stranded=True,
+        count_reads=False
+    )
+
+    sc.pp.filter_genes(adata_atac_genes, min_cells=MIN_CELLS) # type: ignore
+    sc.pp.normalize_total(adata_atac_genes) # type: ignore
+    # Logarithmize the data
+    sc.pp.log1p(adata_atac_genes)
+
+    return adata_atac_genes
 
 
 
+    
 if __name__ == "__main__":
+
+    # Function call: python3 bin/prepare_shareseq_data.py --input_dir data/shareseq --output_dir data/shareseq_processed
 
     parser = argparse.ArgumentParser(description="Prepare SHARE-seq data for downstream analysis.")
     parser.add_argument('--input_dir', required=True, help='Directory with raw SHARE-seq files')
     parser.add_argument('--output_dir', required=True, help='Directory to save processed data')
-    parser.add_argument('--min_cells', type=int, default=2, help='Minimum cells per gene')
-    parser.add_argument('--min_genes', type=int, default=100, help='Minimum genes per cell')
     args = parser.parse_args()
 
     # Define file paths
@@ -178,7 +232,7 @@ if __name__ == "__main__":
     # Load data
     df_celltype = pd.read_csv(filepath_or_buffer=CELLTYPE_FILE, sep='\t')
     df_rna_counts = pd.read_csv(RNA_COUNTS_FILE, sep='\t', index_col=0)
-    atac = sc.read_mtx(ATAC_COUNTS_FILE).T
+    atac_mtx = sc.read_mtx(ATAC_COUNTS_FILE).T
     barcodes = pd.read_csv(ATAC_BARCODES_FILE, header=None)
     peaks = pd.read_csv(ATAC_PEAKS_FILE, sep="\t", header=None, names=["chrom", "start", "end"])
 
@@ -193,16 +247,18 @@ if __name__ == "__main__":
 
     # Process data
     adata_rna = get_rna_anndata(df_rna_counts, df_celltype)
-    adata_rna = filter_rna_anndata(adata_rna, min_cells=args.min_cells, min_genes=args.min_genes, log_file=log_file)
+    adata_rna = filter_rna_anndata(adata_rna, log_file=log_file)
 
-    atac = process_atac_data(df_celltype, atac, barcodes, peaks)
-    mu.atac.tl.locate_fragments(atac, str(ATAC_FRAGMENTS_FILE))
-    pp_data = add_metrics_atac(atac, log_file=log_file)
-    
+    atac_processed = process_atac_data(df_celltype, atac_mtx, barcodes, peaks)
+    mu.atac.tl.locate_fragments(atac_processed, str(ATAC_FRAGMENTS_FILE))
+    pp_data = add_metrics_atac(atac_processed, log_file=log_file)
+    atac_genes = get_atac_genes(adata_rna, pp_data, args.input_dir)
 
     # Write data
     ad_rna_path = args.output_dir+"/c_sc_ad.h5ad"
     adata_rna.write_h5ad(ad_rna_path)
     atac_path = args.output_dir+"/c_atac_ad.h5ad"
     pp_data.write_h5ad(atac_path)
+    atac_gene_path = args.output_dir+"/c_atac_genes_ad.h5ad"
+    atac_genes.write_h5ad(atac_gene_path)
     
