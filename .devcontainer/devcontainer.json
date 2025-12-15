@@ -1,0 +1,19 @@
+{
+  "name": "my-container",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "remoteUser": "mambauser",
+  "updateRemoteUserUID": true,
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      },
+      "extensions": [
+        "EditorConfig.EditorConfig"
+      ]
+    }
+  }
+}
