@@ -30,8 +30,6 @@ env/
 venv/
 .conda/
 .venv/
-*.yml
-*.yaml
 
 
 # Folders to ignore

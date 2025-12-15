@@ -1,0 +1,29 @@
+name: shiny
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - anndata=0.12.6
+  - h5py=3.15.1
+  - hdf5=1.14.6
+  - matplotlib=3.10.8
+  - matplotlib-base=3.10.8
+  - matplotlib-inline=0.2.1
+  - numpy=2.3.5
+  - pandas=2.3.3
+  - pip=25.3
+  - python=3.11.14
+  - scanpy=1.11.5
+  - scikit-learn=1.7.2
+  - scipy=1.16.3
+  - seaborn=0.13.2
+  - seaborn-base=0.13.2
+  - tqdm=4.67.1
+  - umap-learn=0.5.9.post2
+  - yaml=0.2.5
+  - pip:
+      - shiny==1.5.0
+      - shinychat==0.2.8
+      - uvicorn==0.38.0
+      - websockets==15.0.1
