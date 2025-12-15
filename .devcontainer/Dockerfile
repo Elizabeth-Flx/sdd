@@ -12,6 +12,7 @@ RUN apt-get update \
 USER mambauser
 
 COPY --chown=mambauser:mambauser envs/shiny_env.yml /tmp/envs/shiny_env.yml
+COPY --chown=mambauser:mambauser envs/scanit_env.yml /tmp/envs/scanit_env.yml
 
 RUN ls -R /tmp/envs
 
@@ -25,6 +26,8 @@ RUN micromamba run -n r_packages R -q -e ' \
     install.packages("devtools", repos="https://cloud.r-project.org"); \
   devtools::install_github("zhengli09/BASS")'
 
+RUN micromamba create -y -f /tmp/envs/scanit_env.yml && \
+    micromamba clean --all --yes
 
 SHELL ["bash", "-c"]
 RUN echo "source /usr/local/bin/_micromamba.sh" >> ~/.bashrc
