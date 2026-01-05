@@ -10,6 +10,7 @@ import sys
 import re
 import argparse
 import genetic_annotation as ga
+import shutil
 
 
 ## Set constants
@@ -58,7 +59,6 @@ def filter_rna_anndata(adata_rna, log_file=None):
             f.write(f"min_cells: {MIN_CELLS}\n\
                         min_genes: {MIN_GENES}\n")
 
-    
     sc.pp.calculate_qc_metrics(
         adata_rna, inplace=True, log1p=True
     )
@@ -75,7 +75,6 @@ def filter_rna_anndata(adata_rna, log_file=None):
     sc.tl.pca(adata_rna)
 
     return adata_rna
-
 
 
 def process_atac_data(celltype, atac, barcodes, peaks):
@@ -209,7 +208,6 @@ def get_atac_genes(adata_rna, atac, input_dir):
     return adata_atac_genes
 
 
-
     
 if __name__ == "__main__":
 
@@ -254,11 +252,18 @@ if __name__ == "__main__":
     pp_data = add_metrics_atac(atac_processed, log_file=log_file)
     atac_genes = get_atac_genes(adata_rna, pp_data, args.input_dir)
 
-    # Write data
+
+    # Write processed RNA and ATAC data
     ad_rna_path = args.output_dir+"/c_sc_ad.h5ad"
     adata_rna.write_h5ad(ad_rna_path)
     atac_path = args.output_dir+"/c_atac_ad.h5ad"
     pp_data.write_h5ad(atac_path)
     atac_gene_path = args.output_dir+"/c_atac_genes_ad.h5ad"
     atac_genes.write_h5ad(atac_gene_path)
+
+    # Process and save spatial data subset to HVGs (if spatial file exists)
+    spatial_path = Path(args.input_dir) / "c_sp_ad.h5ad"
+    # Copy file to output dir
+    output_spatial_path = Path(args.output_dir) / "c_sp_ad.h5ad"
+    shutil.copy(spatial_path, output_spatial_path)
     
