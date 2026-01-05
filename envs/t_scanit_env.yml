@@ -8,12 +8,15 @@ dependencies:
   - scipy
   - scikit-learn
   - pandas
-  - networkx
+  - networkx<3
   - matplotlib
   - anndata
   - umap-learn
   - gudhi
+  - python-igraph
+  - leidenalg
   - ipykernel
+  - scanpy
   - pip:
       - torch
       - torch-geometric
