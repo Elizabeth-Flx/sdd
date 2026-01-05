@@ -13,6 +13,7 @@ dependencies:
   - anndata
   - umap-learn
   - gudhi
+  - ipykernel
   - pip:
       - torch
       - torch-geometric
