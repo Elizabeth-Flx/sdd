@@ -1,5 +1,5 @@
-import os
-import torch
+#! /usr/bin/env python3
+
 import scanpy as sc
 import argparse
 from GraphST import GraphST

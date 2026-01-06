@@ -31,7 +31,7 @@ source ~/miniforge3/bin/activate "$GRAPHST_ENV"
 # 3. Run GraphST on spatial and Tangram-mapped data
 echo "Running GraphST on spatial data..."
 TOOL_NAME="graphst"
-python3 bin/t_graph_st.py --input_h5ad "$SHARESEQ_PROC_DIR/c_sp_ad.h5ad" --output_h5ad "$TOOLS_OUT_DIR/$TOOL_NAME/c_sp_ad_graphst.h5ad"
+python3 bin/t_graph_st.py --input_h5ad "$DATA_DIR/DLPFC_151671_processed.h5ad" --output_h5ad "$TOOLS_OUT_DIR/$TOOL_NAME/sp_dlpfc_graphst.h5ad"
 echo "Running GraphST on Tangram-mapped data..."
 python3 bin/t_graph_st.py --input_h5ad "$TANGRAM_OUT_DIR/sp_atac.h5ad" --output_h5ad "$TOOLS_OUT_DIR/$TOOL_NAME/sp_atac_graphst.h5ad"
 

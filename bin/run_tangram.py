@@ -124,10 +124,10 @@ if __name__ == "__main__":
     ad_map_ge.write_h5ad(output_path)  # type:ignore
 
     # Copy sp file to output dir
-    output_spatial_path = f"{args.output_dir}/c_sp_ad.h5ad"
-    shutil.copy(f"{args.input_dir}/c_sp_ad.h5ad", output_spatial_path)
+    # output_spatial_path = f"{args.output_dir}/c_sp_ad.h5ad"
+    # shutil.copy(f"{args.input_dir}/c_sp_ad.h5ad", output_spatial_path)
 
-    plot_path = f"{args.output_dir}/figures/"
-    # Create directory if it doesn't exist
-    os.makedirs(plot_path, exist_ok=True)
+    # plot_path = f"{args.output_dir}/figures/"
+    # # Create directory if it doesn't exist
+    # os.makedirs(plot_path, exist_ok=True)
     # plot_tangram_results(ad_map, ad_sp, ad_rna, annotation_list, plot_path)
