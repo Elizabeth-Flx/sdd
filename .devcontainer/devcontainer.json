@@ -6,6 +6,9 @@
   },
   "remoteUser": "mambauser",
   "updateRemoteUserUID": true,
+  "mounts": [
+  // "source=/nfs/home/students/d.lochert/projects/sdd/SysBioSDD/dlpfc/,target=/data/dlpfc,type=bind"
+  ],
   "customizations": {
     "vscode": {
       "settings": {
