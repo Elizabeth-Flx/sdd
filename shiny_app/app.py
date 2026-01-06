@@ -26,8 +26,6 @@ def read_visium_h5ad(path: str):
 # ---------------------------------------------------------------------
 app_ui = ui.page_sidebar(
     ui.sidebar(
-        ui.h3("Spatial Domain Detection 🧬"),
-        ui.hr(),
         ui.h4("1. Data input"),
         ui.input_file(
             "file",
