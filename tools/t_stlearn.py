@@ -4,11 +4,6 @@ import argparse
 
 
 def preprocessing(adata):
-    # Preprocessing
-    st.pp.filter_genes(adata, min_cells=3)
-    st.pp.normalize_total(adata, target_sum=1e4)
-    st.pp.log1p(adata)
-    st.pp.scale(adata, max_value=10)
 
     # Spatially-aware normalization and PCA
     adata.obs["imagerow"] = adata.obsm["spatial"][:, 1]
@@ -46,9 +41,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     adata = dl.open_anndata("../files/" + args.input)
+    adata = dl.shared_preprocessing(adata)
 
     adata = preprocessing(adata)
     adata = cluster(adata, n_clusters=args.n_clusters, louvain_resolution=args.louvain_resolution)
+
+    print(adata)
 
     output = "../files/stlearn_" + args.input
 

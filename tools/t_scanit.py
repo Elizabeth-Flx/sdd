@@ -6,21 +6,6 @@ import argparse
 import torch
 import dataloader as dl
 
-def preprocessing(adata):
-    # Preprocessing
-    sc.pp.normalize_total(adata)
-    sc.pp.log1p(adata)
-    sc.pp.scale(adata)
-
-    sc.pp.highly_variable_genes(
-        adata,
-        flavor="cell_ranger",
-        n_top_genes=3000
-    )
-    adata = adata[:, adata.var["highly_variable"]]
-    
-    return adata
-
 def train_model(adata, device=torch.device('cpu')):
     scanit.tl.spatial_graph(
         adata,
@@ -32,7 +17,7 @@ def train_model(adata, device=torch.device('cpu')):
     scanit.tl.spatial_representation(
         adata,
         n_h=30,
-        n_epoch=2000,
+        n_epoch=1000,
         lr=0.001,
         device=device,
         n_consensus=1,
@@ -63,10 +48,12 @@ if __name__ == "__main__":
 
 
     adata = dl.open_anndata("../files/" + args.input)
+    adata = dl.shared_preprocessing(adata)
 
-    adata = preprocessing(adata)
     adata = train_model(adata, device)
     adata = cluster(adata, louvain_resolution=args.louvain_resolution)
+
+    print(adata)
 
     output = "../files/scanit_" + args.input
 

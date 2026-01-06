@@ -50,9 +50,12 @@ if __name__ == "__main__":
 
 
     adata = dl.open_anndata("../files/" + args.input)
+    adata = dl.shared_preprocessing(adata)
 
     adata = train_model(adata, device)
     adata = cluster(adata, n_clusters=args.n_clusters, radius=args.radius)
+
+    print(adata)
 
     output = "../files/graphst_" + args.input
 

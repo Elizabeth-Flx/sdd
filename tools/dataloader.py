@@ -38,3 +38,25 @@ def open_anndata(file_path):
     adata = sc.read_h5ad(file_path)
     return adata
 
+def shared_preprocessing(adata):
+    # Basic filtering
+    sc.pp.filter_genes(adata, min_cells=3)
+
+    # Library size normalization
+    sc.pp.normalize_total(adata, target_sum=1e4)
+
+    # Log transform
+    sc.pp.log1p(adata)
+
+    # Highly variable genes (important!)
+    sc.pp.highly_variable_genes(
+        adata,
+        flavor="cell_ranger",
+        n_top_genes=3000
+    )
+    adata = adata[:, adata.var["highly_variable"]].copy()
+
+    # Scaling
+    sc.pp.scale(adata, max_value=10)
+
+    return adata
