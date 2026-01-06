@@ -1,0 +1,47 @@
+# ───── Git & editor junk ─────
+.git
+.gitignore
+.vscode
+*.swp
+*.tmp
+*~
+
+# ───── Python cache & build ─────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+
+# ───── R / Jupyter junk ─────
+.Rhistory
+.RData
+.Rproj.user/
+.ipynb_checkpoints
+
+# ───── Logs & temp data ─────
+*.log
+*.out
+*.err
+
+# ───── Local envs ─────
+.env
+.venv/
+venv/
+env/
+
+
+# Notebooks: usually mounted, not copied into image
+notebooks/
+
+# Images & large binaries not needed in build
+*.h5ad
+*.png
+*.jpg
+*.jpeg
+*.tif
+*.tiff
+*.pdf
+*.sif
