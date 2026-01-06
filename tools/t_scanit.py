@@ -46,7 +46,6 @@ if __name__ == "__main__":
 
     device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
 
-
     adata = dl.open_anndata("../files/" + args.input)
     adata = dl.shared_preprocessing(adata)
 

@@ -47,8 +47,6 @@ if __name__ == "__main__":
     os.environ['R_HOME'] = os.path.join(conda_env, "lib/R")
     os.environ['PATH'] = os.path.join(conda_env, "bin") + ":" + os.environ['PATH']
 
-
-
     adata = dl.open_anndata("../files/" + args.input)
     adata = dl.shared_preprocessing(adata)
 
