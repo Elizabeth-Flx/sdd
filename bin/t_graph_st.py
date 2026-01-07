@@ -30,6 +30,8 @@ def main(args):
         refinement=True
     )
 
+    adata.obs['graphst_cluster'] = adata.obs['domain']
+
     # Optionally, save the result
     if args.output_h5ad:
         adata.write_h5ad(args.output_h5ad)
