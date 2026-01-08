@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import argparse as ap
+import seaborn as sns
 
 
 def get_cluster_labels(adata):
@@ -96,17 +97,111 @@ def plot_marker_heatmap(adata, y, markers, out_path, name):
     plt.close()
 
 
+def plot_cell_gene_heatmap(
+    adata, 
+    cluster_labels, 
+    genes=None, 
+    out_path=".", 
+    name="heatmap", 
+    cluster_rows=True, 
+    cluster_cols=True, 
+    max_cells=1000,
+    max_genes=50
+):
+    """
+    Plots a heatmap where rows are cells (with cluster annotation) and columns are genes.
+    Optionally clusters rows and/or columns.
+    - adata: AnnData object
+    - cluster_labels: pd.Series or list of cluster labels (length = n_cells)
+    - genes: list of genes to plot (default: all genes)
+    - out_path: directory to save the plot
+    - name: filename suffix
+    - cluster_rows: whether to cluster rows (cells)
+    - cluster_cols: whether to cluster columns (genes)
+    - max_cells: maximum number of cells to plot (for performance)
+    """
+
+
+    # Subset genes if provided, else use top highly variable genes (default: max_genes)
+    if genes is None:
+        # Try to use highly variable genes if present
+        if 'highly_variable' in adata.var.columns:
+            genes = adata.var_names[adata.var['highly_variable']].tolist()
+            if len(genes) > max_genes:
+                genes = genes[:max_genes]
+        else:
+            # If not present, compute variance and select top max_genes
+            X = adata.X
+            if hasattr(X, "toarray"):
+                X = X.toarray()
+            gene_vars = np.var(X, axis=0)
+            top_idx = np.argsort(gene_vars)[-max_genes:]
+            genes = adata.var_names[top_idx].tolist()
+    # Subset cells if too many
+    if adata.n_obs > max_cells:
+        idx = np.random.choice(adata.n_obs, max_cells, replace=False)
+    else:
+        idx = np.arange(adata.n_obs)
+    # Extract expression matrix
+    X = adata[idx, genes].X
+    if hasattr(X, "toarray"):
+        X = X.toarray()
+    # Build DataFrame
+    df = pd.DataFrame(X, columns=genes)
+    df['cluster'] = pd.Series(cluster_labels).iloc[idx].values
+    # Sort by cluster for better visualization
+    df = df.sort_values('cluster')
+    clusters = df['cluster']
+    df = df.drop(columns='cluster')
+    # Create color mapping for clusters
+    unique_clusters = pd.Series(clusters).unique()
+    lut = dict(zip(unique_clusters, sns.color_palette("tab20", len(unique_clusters))))
+    row_colors = clusters.map(lut)
+    # Plot with row_colors
+    g = sns.clustermap(
+        df,
+        row_cluster=cluster_rows,
+        col_cluster=cluster_cols,
+        row_colors=row_colors,
+        yticklabels=False,
+        xticklabels=True,
+        cmap="viridis",
+        figsize=(12, 8),
+        dendrogram_ratio=(.1, .2),
+        cbar_pos=(0.05, 0.2, 0.03, 0.4) 
+    )
+    # Add legend for clusters
+    for label in unique_clusters:
+        g.ax_row_colors.bar(0, 0, color=lut[label], label=str(label), linewidth=0)
+    g.ax_row_colors.legend(
+        title="Cluster",
+        bbox_to_anchor=(1.15, 0.5),
+        loc='center left',
+        ncol=1,
+        frameon=True,
+        borderaxespad=0.0
+    )
+    g.ax_heatmap.set_ylabel("Cells (clustered)")
+    g.ax_heatmap.set_xlabel("Genes")
+    # After creating the clustermap and before saving:
+    plt.title("Expr.", y=1.0, loc = "center")
+    # g.fig.subplots_adjust(top=0.92)  # Adjust as needed for your layout
+    plt.savefig(os.path.join(out_path, f"cell_gene_heatmap_{name}.png"))
+    plt.close()
+
+
 def display_kmeans_clustering(adata, out_path, name) -> None:
-    if "kmeans" not in adata.obs:
+    if "stlearn_kmeans" not in adata.obs:
         print(f"No kmeans clustering found for {name}.")
         return
-    y_kmeans = adata.obs["kmeans"].astype(str)
+    y_kmeans = adata.obs["stlearn_kmeans"].astype(str)
     plot_spatial(adata, y_kmeans, out_path, f"{name}_kmeans")
-    plot_umap_from_obs(adata, "kmeans", out_path, f"{name}_kmeans")
+    plot_umap_from_obs(adata, "stlearn_kmeans", out_path, f"{name}_kmeans")
     sizes, _ = cluster_stats(y_kmeans)
     plot_cluster_sizes(sizes, out_path, f"{name}_kmeans")
+    plot_cell_gene_heatmap(adata, y_kmeans, out_path=out_path,  cluster_rows=False, cluster_cols=True, name=f"{name}_kmeans")
     # markers = marker_genes(adata, y_kmeans, top_n=10)
-    # plot_marker_heatmap(adata, y_kmeans, markers, out_path, f"{name}_kmeans")
+    # plot_marker_heatmap(adata, y_kmeans, markers, out_path, f"{name}_kmeans")    
 
 
 def main():
@@ -132,6 +227,7 @@ def main():
         plot_cluster_sizes(sizes, args.output_dir, f"{name}_{args.cluster_key}")
         plot_umap_from_obs(adata, args.cluster_key, args.output_dir, f"{name}_{args.cluster_key}")
         plot_spatial(adata, y, args.output_dir, f"{name}_{args.cluster_key}")
+        plot_cell_gene_heatmap(adata, y, out_path=args.output_dir, cluster_rows=False, cluster_cols=True, name=f"{name}_{args.cluster_key}")
         # markers = marker_genes(adata, y, top_n=10)
         # plot_marker_heatmap(adata, y, markers, args.output_dir, f"{name}_{args.cluster_key}")
     else:
