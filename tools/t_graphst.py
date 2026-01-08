@@ -1,5 +1,6 @@
 import os
 import torch
+from pathlib import Path
 import pandas as pd
 import scanpy as sc
 from sklearn import metrics
@@ -14,7 +15,7 @@ from scipy.sparse import csr_matrix
 
 import argparse
 
-import dataloader as dl
+from . import dataloader as dl
 
 def train_model(adata, device):
     model = GraphST.GraphST(adata, device=device)
@@ -26,7 +27,7 @@ def cluster(adata, n_clusters, radius):
     clustering(adata, n_clusters, radius=radius, method='mclust', refinement=True)
 
     # rename obs: domain to obs:graphst_cluster
-    adata.obs['graphst_cluster'] = adata.obs['domain']
+    adata.obs['graphst_cluster'] = adata.obs['domain'].astype("category")
 
     return adata
 
@@ -34,7 +35,8 @@ def cluster(adata, n_clusters, radius):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process single-cell spatial transcriptomics data with STLearn.")
-    parser.add_argument("--input", type=str, required=True, help="Name of the input AnnData file.")
+    parser.add_argument("--input", type=str, required=True)
+    parser.add_argument("--output", type=str, required=True)
     parser.add_argument("--n_clusters", type=int, default=12, help="Number of clusters for clustering.")
     parser.add_argument("--radius", type=float, default=50, help="Radius for spatial graph construction.")
     args = parser.parse_args()
@@ -49,11 +51,11 @@ if __name__ == "__main__":
 
 
 
-    adata = dl.open_anndata("../files/" + args.input)
+    adata = dl.open_anndata(args.input)
 
     adata = train_model(adata, device)
     adata = cluster(adata, n_clusters=args.n_clusters, radius=args.radius)
 
-    output = "../files/graphst_" + args.input
+    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
 
-    adata.write_h5ad(output)
+    adata.write_h5ad(args.output)

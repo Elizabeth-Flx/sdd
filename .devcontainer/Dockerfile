@@ -49,10 +49,6 @@ RUN micromamba create -y -f /tmp/envs/t_stlearn_env.yml -n t_stlearn
 
 RUN micromamba clean --all --yes
 
-
-RUN micromamba create -y -f /tmp/envs/scanit_env.yml && \
-    micromamba clean --all --yes
-
 SHELL ["bash", "-c"]
 RUN echo "source /usr/local/bin/_micromamba.sh" >> ~/.bashrc
 

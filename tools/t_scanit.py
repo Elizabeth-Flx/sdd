@@ -4,7 +4,7 @@ import numpy as np
 import argparse
 
 import torch
-import dataloader as dl
+from . import dataloader as dl
 
 def preprocessing(adata):
     # Preprocessing
@@ -12,11 +12,20 @@ def preprocessing(adata):
     sc.pp.log1p(adata)
     sc.pp.scale(adata)
 
-    sc.pp.highly_variable_genes(
-        adata,
-        flavor="cell_ranger",
-        n_top_genes=3000
-    )
+    try:
+        sc.pp.highly_variable_genes(
+            adata,
+            flavor="cell_ranger",
+            n_top_genes=3000,
+            n_bins=20,
+        )
+    except ValueError:
+        sc.pp.highly_variable_genes(
+            adata,
+            flavor="seurat",
+            n_top_genes=3000,
+        )
+
     adata = adata[:, adata.var["highly_variable"]]
     
     return adata
@@ -55,6 +64,7 @@ def cluster(adata,  louvain_resolution=1.19):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process single-cell spatial transcriptomics data with STLearn.")
     parser.add_argument("--input", type=str, required=True, help="Name of the input AnnData file.")
+    parser.add_argument("--output", type=str, required=True, help="Path to output .h5ad")
     # parser.add_argument("--n_clusters", type=int, default=19, help="Number of clusters for k-means.")
     parser.add_argument("--louvain_resolution", type=float, default=1.19, help="Resolution parameter for Louvain clustering.")
     args = parser.parse_args()
@@ -62,12 +72,10 @@ if __name__ == "__main__":
     device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
 
 
-    adata = dl.open_anndata("../files/" + args.input)
+    adata = dl.open_anndata(args.input)
 
     adata = preprocessing(adata)
     adata = train_model(adata, device)
     adata = cluster(adata, louvain_resolution=args.louvain_resolution)
 
-    output = "../files/scanit_" + args.input
-
-    adata.write_h5ad(output)
+    adata.write_h5ad(args.output)
