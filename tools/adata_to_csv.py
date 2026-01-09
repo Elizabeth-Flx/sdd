@@ -25,9 +25,9 @@ def create_csvs(adata_path, csv_dir="../files/csv/"):
 
     colData = adata.obs.copy()
 
-    countData.to_csv(csv_dir + "counts.csv.gz", compression="gzip")
-    rowData.to_csv(csv_dir + "rowData.csv")
-    colData.to_csv(csv_dir + "colData.csv")
+    countData.to_csv(csv_dir + "/counts.csv.gz", compression="gzip")
+    rowData.to_csv(csv_dir + "/rowData.csv")
+    colData.to_csv(csv_dir + "/colData.csv")
 
 if __name__ == "__main__":
     import argparse

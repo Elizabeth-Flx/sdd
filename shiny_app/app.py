@@ -81,6 +81,17 @@ app_ui = ui.page_sidebar(
             ui.output_text_verbatim("stlearn_plot_info"),
             ui.output_plot("stlearn_plot"),
         ),
+        ui.card(
+            ui.card_header("BayesSpace result"),
+            ui.output_text_verbatim("bayesspace_plot_info"),
+            ui.output_plot("bayesspace_plot"),
+        ),
+        ui.card(
+            ui.card_header("BASS result"),
+            ui.output_text_verbatim("bass_plot_info"),
+            ui.output_plot("bass_plot"),
+        ),
+
 
         width=1 / 2,
     ),
@@ -171,13 +182,18 @@ def server(input, output, session):
 
   
 
-    def run_tool(tool_key: str, adata_path: str, csv_dir: Path) -> dict:
+    def run_tool(tool_key: str, adata_path: str, csv_dir: Path, r_input_dir: Path | None) -> dict:
         project_root = Path(__file__).resolve().parents[1]
+
+        if tool_key in ("bayesspace", "bass") and r_input_dir is None:
+            return {"ok": False, "error": "Missing r_input_dir (adata_to_csv not run)."}
 
         outputs = {
             "scanit": str((csv_dir / "scanit.csv").resolve()),
             "graphst": str((csv_dir / "graphst.csv").resolve()),
             "stlearn": str((csv_dir / "stlearn.csv").resolve()),
+            "bayesspace": str((csv_dir / "bayesspace.csv").resolve()),
+            "bass": str((csv_dir / "bass.csv").resolve()),
         }
 
         cmds = {
@@ -199,7 +215,16 @@ def server(input, output, session):
                 "--input", adata_path,
                 "--output", outputs["stlearn"]
             ],
-
+            "bayesspace": [
+                "micromamba", "run", "-n", "t_bayesspace_bass",
+                "Rscript", "tools/t_bayesspace.R",
+                str(r_input_dir), outputs["bayesspace"]
+            ],
+            "bass": [
+                "micromamba", "run", "-n", "t_bayesspace_bass",
+                "Rscript", "tools/t_bass.R",
+                str(r_input_dir), outputs["bass"]
+            ],
         }
 
         cmd = cmds[tool_key]
@@ -256,6 +281,7 @@ def server(input, output, session):
             return
 
         selected = input.tools() or []
+
         if not selected:
             tools_result.set({})
             return
@@ -286,11 +312,45 @@ def server(input, output, session):
 
 
         results = {"_run_dir": str(run_dir)}
+
+        needs_r_input = any(t in ("bayesspace", "bass") for t in selected)
+        r_input_dir = None
+
+        if needs_r_input:
+            r_input_dir = run_dir / "r_input"
+            r_input_dir.mkdir(parents=True, exist_ok=True)
+
+            adata_to_csv_cmd = [
+                "micromamba", "run", "-n", "t_stlearn",  
+                "python", "-m", "tools.adata_to_csv",
+                "--input", adata_path,
+                "--output_dir", str(r_input_dir),
+            ]
+
+            p_csv = subprocess.run(
+                adata_to_csv_cmd,
+                cwd=project_root,
+                capture_output=True,
+                text=True,
+            )
+
+            results["_adata_to_csv"] = {
+                "ok": p_csv.returncode == 0,
+                "returncode": p_csv.returncode,
+                "stdout": (p_csv.stdout or "")[-4000:],
+                "stderr": (p_csv.stderr or "")[-4000:],
+                "input_dir": str(r_input_dir),
+            }
+
+            if p_csv.returncode != 0:
+                tools_result.set(results)
+                return
+
         for tool_key in selected:
-            if tool_key not in ("scanit", "graphst", "stlearn"):
+            if tool_key not in ("scanit", "graphst", "stlearn", "bayesspace", "bass"):
                 results[tool_key] = {"ok": False, "error": "Tool not wired up yet."}
                 continue
-            results[tool_key] = run_tool(tool_key, adata_path, csv_dir)
+            results[tool_key] = run_tool(tool_key, adata_path, csv_dir, r_input_dir)
 
         combined_path = run_dir / "combined.h5ad"
 
@@ -621,6 +681,54 @@ def server(input, output, session):
         fig = plot_spatial_clusters(a, "stlearn", "stLearn clusters")
         if fig is not None:
             return fig
+
+    # -----------------------
+    # BayesSpace result plotting
+    # -----------------------
+    @output
+    @render.text
+    def bayesspace_plot_info():
+        a = adata()
+        if a is None:
+            return "No data loaded."
+        if "spatial" not in a.obsm:
+            return "No spatial coordinates."
+        if "bayesspace" not in a.obs.columns:
+            return "No BayesSpace result yet (obs['bayesspace'] missing). Run BayesSpace first."
+        return "Showing BayesSpace clusters (obs['bayesspace'])."
+
+    @output
+    @render.plot
+    def bayesspace_plot():
+        a = adata()
+        fig = plot_spatial_clusters(a, "bayesspace", "BayesSpace clusters")
+        if fig is not None:
+            return fig
+
+    # -----------------------
+    # Bass result plotting
+    # -----------------------
+
+    @output
+    @render.text
+    def bass_plot_info():
+        a = adata()
+        if a is None:
+            return "No data loaded."
+        if "spatial" not in a.obsm:
+            return "No spatial coordinates."
+        if "bass" not in a.obs.columns:
+            return "No BASS result yet (obs['bass'] missing). Run BASS first."
+        return "Showing BASS clusters (obs['bass'])."
+
+    @output
+    @render.plot
+    def bass_plot():
+        a = adata()
+        fig = plot_spatial_clusters(a, "bass", "BASS clusters")
+        if fig is not None:
+            return fig
+
 
 
 
