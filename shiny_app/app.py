@@ -5,6 +5,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import subprocess
 from pathlib import Path
+import tempfile
+import shutil
+from uuid import uuid4
 
 # ---------------------------------------------------------------------
 # 1) Preloaded / Demo dataset
@@ -12,7 +15,9 @@ from pathlib import Path
 DEMO_PATH = "data/adata.h5ad"
 
 try:
-    demo_adata = sc.read_h5ad(DEMO_PATH)
+    project_root = Path(__file__).resolve().parents[1]
+    demo_adata = sc.read_h5ad(str((project_root / DEMO_PATH).resolve()))
+
 except Exception as e:
     print(f"Could not load demo dataset from {DEMO_PATH}: {e}")
     demo_adata = None
@@ -31,9 +36,10 @@ app_ui = ui.page_sidebar(
         ui.input_file(
             "file",
             "Upload a spatial dataset (.h5ad)",
-            multiple=False,
+            multiple=True,
             accept=[".h5ad"],
         ),
+        ui.output_ui("dataset_picker_ui"),
         ui.br(),
         ui.output_text_verbatim("info"),
         ui.h4("2. Tools"),
@@ -86,20 +92,96 @@ app_ui = ui.page_sidebar(
 # 3) Server
 # ---------------------------------------------------------------------
 def server(input, output, session):
+    # ----------------------- Session workdir ------------------------
+    base_tmp = Path(tempfile.gettempdir()) / "spatial-shiny"
+    base_tmp.mkdir(parents=True, exist_ok=True)
+
+    session_dir = base_tmp / f"session-{uuid4().hex}"
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+    # Clean up session directory on session end
+    def clean_session_dir():
+        shutil.rmtree(session_dir, ignore_errors=True)
+
+    session.on_ended(clean_session_dir)
+
+
     # -----------------------
     # Tool execution handling
     # -----------------------
-    tools_result = reactive.Value({})  
 
-    def run_tool(tool_key: str, adata_path: str) -> dict:
-        project_root = Path(__file__).resolve().parents[1] 
-        out_dir = (project_root / "results")
-        out_dir.mkdir(parents=True, exist_ok=True)
+    tools_result = reactive.Value({})
+
+    uploads_state = reactive.Value([])
+
+    @reactive.Effect
+    def _track_uploads():
+        file_list = input.file() or []
+        if not file_list:
+            return
+
+        current = uploads_state.get()
+        seen_srcs = {u["src_datapath"] for u in current}
+
+        new_entries = []
+        for info in file_list:
+            src_datapath = info["datapath"]
+            if src_datapath in seen_srcs:
+                continue
+
+            new_entries.append({
+                "id": uuid4().hex,
+                "name": info["name"],
+                "src_datapath": src_datapath,
+                "path": src_datapath,  # <-- Shiny temp path, wir kopieren erst beim Run
+            })
+
+        if new_entries:
+            uploads_state.set(current + new_entries)
+
+
+    @output
+    @render.ui
+    def dataset_picker_ui():
+        ups = uploads_state.get()
+        if not ups:
+            return ui.div("No uploads yet (using demo).")
+
+        choices = {u["id"]: f"{u['name']} ({u['id'][:6]})" for u in ups}
+        selected = ups[-1]["id"]  # default: letzter Upload
+        return ui.input_select("active_upload", "Active dataset:", choices, selected=selected)
+
+    @reactive.Calc
+    def active_adata_path():
+        ups = uploads_state.get()
+        if not ups:
+            return DEMO_PATH
+
+        try:
+            active_id = input.active_upload()
+        except Exception:
+            active_id = ups[-1]["id"]
+
+        for u in ups:
+            if u["id"] == active_id:
+                return u["path"]
+
+        return ups[-1]["path"]
+
+
+  
+
+    def run_tool(tool_key: str, adata_path: str, run_dir: Path) -> dict:
+        project_root = Path(__file__).resolve().parents[1]
+
+        results_out = run_dir / "results"
+        results_out.mkdir(parents=True, exist_ok=True)
+ 
 
         outputs = {
-            "scanit": str((out_dir / "scanit_out.h5ad").resolve()),
-            "graphst": str((out_dir / "graphst_out.h5ad").resolve()),
-            "stlearn": str((out_dir / "stlearn_out.h5ad").resolve()),
+            "scanit": str((results_out / "scanit_out.h5ad").resolve()),
+            "graphst": str((results_out / "graphst_out.h5ad").resolve()),
+            "stlearn": str((results_out / "stlearn_out.h5ad").resolve()),
         }
 
         cmds = {
@@ -182,15 +264,34 @@ def server(input, output, session):
             tools_result.set({})
             return
 
-        file_list = input.file()
-        adata_path = file_list[0]["datapath"] if file_list else DEMO_PATH
+        run_id = f"run-{uuid4().hex}"
+        run_dir = session_dir / run_id
+        upload_dir = run_dir / "upload"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "results").mkdir(parents=True, exist_ok=True)
 
-        results = {}
+        project_root = Path(__file__).resolve().parents[1]
+
+        src_path = active_adata_path() or DEMO_PATH
+        src = Path(src_path)
+
+        if src_path == DEMO_PATH:
+            src = (project_root / DEMO_PATH).resolve()
+        else:
+            src = src.resolve()
+
+        dst = upload_dir / src.name
+        shutil.copy2(src, dst)
+        adata_path = str(dst)
+
+
+
+        results = {"_run_dir": str(run_dir)}
         for tool_key in selected:
             if tool_key not in ("scanit", "graphst", "stlearn"):
                 results[tool_key] = {"ok": False, "error": "Tool not wired up yet."}
                 continue
-            results[tool_key] = run_tool(tool_key, adata_path)
+            results[tool_key] = run_tool(tool_key, adata_path, run_dir)
 
         tools_result.set(results)
 
@@ -201,8 +302,17 @@ def server(input, output, session):
         if not res:
             return "No tools executed yet."
 
+        run_dir = res.get("_run_dir") if isinstance(res, dict) else None
+
         blocks = []
+        if run_dir:
+            blocks.append(f"RUN DIR:\n{run_dir}\n")
+
         for tool_name, r in res.items():
+
+            if tool_name == "_run_dir":
+                continue
+
             lines = [f"=== {tool_name.upper()} ==="]
             lines.append("[OK]" if r.get("ok") else "[FAIL]")
 
@@ -238,11 +348,11 @@ def server(input, output, session):
     # -----------------------
     @reactive.Calc
     def adata():
-        file_list = input.file()
-        if not file_list:
+        path = active_adata_path()
+        if path == DEMO_PATH:
             return demo_adata
-        file_info = file_list[0]
-        return read_visium_h5ad(file_info["datapath"])
+        return read_visium_h5ad(path)
+
 
     @output
     @render.text
