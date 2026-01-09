@@ -34,6 +34,11 @@ RUN micromamba run -n t_bayesspace_bass R -q -e '\
       install.packages("devtools", repos="https://cloud.r-project.org"); \
     devtools::install_github("zhengli09/BASS")'
 
+# ---- IRkernel for Jupyter ----
+RUN micromamba run -n t_bayesspace_bass R -q -e '\
+    install.packages("IRkernel", repos="https://cloud.r-project.org"); \
+    IRkernel::installspec(user = FALSE)'
+
 # ---- GraphST ----
 COPY --chown=mambauser:mambauser envs/t_graphst_env.yml /tmp/envs/t_graphst_env.yml
 RUN micromamba create -y -f /tmp/envs/t_graphst_env.yml -n t_graphst
@@ -48,8 +53,6 @@ RUN micromamba create -y -f /tmp/envs/t_stlearn_env.yml -n t_stlearn
 
 
 RUN micromamba clean --all --yes
-
-
 
 SHELL ["bash", "-c"]
 RUN echo "source /usr/local/bin/_micromamba.sh" >> ~/.bashrc

@@ -1,14 +1,9 @@
-import dataloader as dl
+from . import dataloader as dl
 import stlearn as st
 import argparse
-
+from pathlib import Path
 
 def preprocessing(adata):
-    # Preprocessing
-    st.pp.filter_genes(adata, min_cells=3)
-    st.pp.normalize_total(adata, target_sum=1e4)
-    st.pp.log1p(adata)
-    st.pp.scale(adata, max_value=10)
 
     # Spatially-aware normalization and PCA
     adata.obs["imagerow"] = adata.obsm["spatial"][:, 1]
@@ -40,16 +35,19 @@ def cluster(adata, n_clusters=19, louvain_resolution=1.19):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process single-cell spatial transcriptomics data with STLearn.")
-    parser.add_argument("--input", type=str, required=True, help="Name of the input AnnData file.")
+    
+    parser.add_argument("--input", type=str, required=True, help="Input anndata file")
+    parser.add_argument("--output", type=str, required=True, help="Output csv file")    
+    
+    # parser.add_argument("--input", type=str, required=True, help="Name of the input AnnData file.")
     parser.add_argument("--n_clusters", type=int, default=19, help="Number of clusters for k-means.")
     parser.add_argument("--louvain_resolution", type=float, default=1.19, help="Resolution parameter for Louvain clustering.")
     args = parser.parse_args()
 
-    adata = dl.open_anndata("../files/" + args.input)
+    adata = dl.open_anndata(args.input)
+    adata = dl.shared_preprocessing(adata)
 
     adata = preprocessing(adata)
     adata = cluster(adata, n_clusters=args.n_clusters, louvain_resolution=args.louvain_resolution)
 
-    output = "../files/stlearn_" + args.input
-
-    adata.write_h5ad(output)
+    dl.save_cluster(args.output, adata, "stlearn_louvain")
