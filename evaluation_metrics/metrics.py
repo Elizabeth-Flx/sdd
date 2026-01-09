@@ -83,6 +83,8 @@ for dir in dirs:
         
     umap_plot(adata, dict_all_methods, umap_path, groundtruth=groundtruth)
     
+    print(f"UMAP plots saved to {umap_path}")
+    
     sankey_path = os.path.join(figures_path, f"sankey_{dir}")
     if not os.path.exists(sankey_path):
         os.makedirs(sankey_path)
@@ -92,6 +94,8 @@ for dir in dirs:
 
     #fig_sankey.show()
     fig_sankey.write_image(os.path.join(sankey_path, "sankey_diagram.png"))
+    
+    print(f"Sankey diagram saved to {sankey_path}")
         
         
     # accuracy metrics calculation
@@ -100,15 +104,21 @@ for dir in dirs:
     Purity_all[dir] = Purity_scores
     AMI_all[dir] = AMI_scores
     
+    print(f"Accuracy metrics calculated for directory {dir}")
+    
     # spatial metrics calculation
     ILISI_scores, PAS_scores = calculate_spatial_metrics(adata, dict_all_methods)
     ILISI_all[dir] = ILISI_scores
     PAS_all[dir] = PAS_scores
     
+    print(f"Spatial metrics calculated for directory {dir}")
+    
     # silhouette metrics calculation
     Silhouette_exp_scores, Silhouette_spat_scores = calculate_silhouette_metrics(adata, dict_all_methods)
     Silhouette_exp_all[dir] = Silhouette_exp_scores
     Silhouette_spat_all[dir] = Silhouette_spat_scores
+    
+    print(f"Silhouette metrics calculated for directory {dir}")
     
 # generate dataframe for all metrics
 
@@ -127,12 +137,16 @@ df_all_metrics, df_all_metrics_mean = generate_metrics_df_from_dicts(metric_dict
 df_all_metrics.to_csv(os.path.join(figures_path, "all_metrics_detailed.csv"))
 df_all_metrics_mean.to_csv(os.path.join(figures_path, "all_metrics_summary.csv"))
 
+print(f"All metrics dataframes saved to {figures_path}")
+
 # here everything for plotting should be included in shiny as options and only then plotted
 
 boxplot_p = plot_metric_boxplots_gg(df_all_metrics, 'ARI', figures_path)
 lineplot_p = plot_metric_lineplot_datasets_gg(df_all_metrics, 'ARI', figures_path)
 
 mean_plots = plot_means_lineplot(df_all_metrics_mean, figures_path)
+
+print("Plots generated and saved for directory {figures_path}")
 
 
 
