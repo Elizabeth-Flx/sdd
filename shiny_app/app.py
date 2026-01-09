@@ -171,17 +171,13 @@ def server(input, output, session):
 
   
 
-    def run_tool(tool_key: str, adata_path: str, run_dir: Path) -> dict:
+    def run_tool(tool_key: str, adata_path: str, csv_dir: Path) -> dict:
         project_root = Path(__file__).resolve().parents[1]
 
-        results_out = run_dir / "results"
-        results_out.mkdir(parents=True, exist_ok=True)
- 
-
         outputs = {
-            "scanit": str((results_out / "scanit_out.h5ad").resolve()),
-            "graphst": str((results_out / "graphst_out.h5ad").resolve()),
-            "stlearn": str((results_out / "stlearn_out.h5ad").resolve()),
+            "scanit": str((csv_dir / "scanit.csv").resolve()),
+            "graphst": str((csv_dir / "graphst.csv").resolve()),
+            "stlearn": str((csv_dir / "stlearn.csv").resolve()),
         }
 
         cmds = {
@@ -268,7 +264,10 @@ def server(input, output, session):
         run_dir = session_dir / run_id
         upload_dir = run_dir / "upload"
         upload_dir.mkdir(parents=True, exist_ok=True)
-        (run_dir / "results").mkdir(parents=True, exist_ok=True)
+        
+        csv_dir = run_dir / "csv"
+        csv_dir.mkdir(parents=True, exist_ok=True)
+
 
         project_root = Path(__file__).resolve().parents[1]
 
@@ -291,9 +290,41 @@ def server(input, output, session):
             if tool_key not in ("scanit", "graphst", "stlearn"):
                 results[tool_key] = {"ok": False, "error": "Tool not wired up yet."}
                 continue
-            results[tool_key] = run_tool(tool_key, adata_path, run_dir)
+            results[tool_key] = run_tool(tool_key, adata_path, csv_dir)
+
+        combined_path = run_dir / "combined.h5ad"
+
+        combine_cmd = [
+            "micromamba", "run", "-n", "t_stlearn",
+            "python", "-m", "tools.combine",
+            "--input", adata_path,
+            "--csv_dir", str(csv_dir),
+            "--output", str(combined_path),
+        ]
+
+        p = subprocess.run(
+            combine_cmd,
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+        )
+
+        combined_ok = (p.returncode == 0) and combined_path.exists()
+
+        results["_combine"] = {
+            "ok": combined_ok,
+            "returncode": p.returncode,
+            "stdout": (p.stdout or "")[-4000:],
+            "stderr": (p.stderr or "")[-4000:],
+        }
+
+        if combined_ok:
+            results["_combined_h5ad"] = str(combined_path)
+        else:
+            results["_combined_h5ad"] = None
 
         tools_result.set(results)
+
 
     @output
     @render.text
@@ -309,9 +340,9 @@ def server(input, output, session):
             blocks.append(f"RUN DIR:\n{run_dir}\n")
 
         for tool_name, r in res.items():
-
-            if tool_name == "_run_dir":
+            if tool_name in ("_run_dir", "_combined_h5ad"):
                 continue
+
 
             lines = [f"=== {tool_name.upper()} ==="]
             lines.append("[OK]" if r.get("ok") else "[FAIL]")
@@ -348,6 +379,13 @@ def server(input, output, session):
     # -----------------------
     @reactive.Calc
     def adata():
+        res = tools_result.get()
+        combined = res.get("_combined_h5ad") if isinstance(res, dict) else None
+
+        if combined and Path(combined).exists():
+            return sc.read_h5ad(combined)
+
+        # fallback
         path = active_adata_path()
         if path == DEMO_PATH:
             return demo_adata
@@ -373,6 +411,48 @@ def server(input, output, session):
             f"Genes: {a.n_vars}\n"
             f"obs columns: {list(a.obs.columns)}"
         )
+
+    def plot_spatial_clusters(a, col: str, title: str):
+        if a is None or "spatial" not in a.obsm:
+            return None
+
+        coords = a.obsm["spatial"]
+        x, y = coords[:, 0], coords[:, 1]
+
+        fig, ax = plt.subplots(figsize=(5, 5))
+
+        if col in a.obs.columns:
+            s = a.obs[col]
+            cats = s.astype("category")
+            codes = cats.cat.codes.to_numpy()
+            sc_plt = ax.scatter(x, y, c=codes, s=12, alpha=0.9)
+
+            handles = []
+            max_code = codes.max() if codes.size else 0
+            for cat_value in cats.cat.categories:
+                idxs = np.where(cats.to_numpy() == cat_value)[0]
+                if len(idxs) == 0:
+                    continue
+                idx = idxs[0]
+                norm_value = codes[idx] / max_code if max_code > 0 else 0
+                color = sc_plt.cmap(norm_value)
+                handles.append(
+                    plt.Line2D([], [], marker="o", color=color, linestyle="",
+                            label=str(cat_value), markersize=6)
+                )
+
+            ax.legend(handles=handles, title=col, bbox_to_anchor=(1.05, 1), loc="upper left")
+        else:
+            ax.text(0.5, 0.5, f"Missing obs['{col}']",
+                    ha="center", va="center", transform=ax.transAxes)
+
+        ax.set_title(title)
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.invert_yaxis()
+        ax.set_aspect("equal", "box")
+        return fig
+
 
     # -----------------------
     # Main visualization (current adata)
@@ -476,235 +556,72 @@ def server(input, output, session):
     # -----------------------
     # SCAN-IT result plotting
     # -----------------------
-    @reactive.Calc
-    def scanit_result_adata():
-        res = tools_result.get()
-        r = res.get("scanit") if isinstance(res, dict) else None
-        out_path = r.get("output") if (r and r.get("ok")) else None
-        if not out_path:
-            return None
-
-        p = Path(out_path)
-        if not p.exists():
-            return None
-
-        return sc.read_h5ad(str(p))
-
     @output
     @render.text
     def scanit_plot_info():
-        a = scanit_result_adata()
+        a = adata()
         if a is None:
-            return "No SCAN-IT result yet. Run SCAN-IT first."
-        if "spatial" not in a.obsm.keys():
-            return "SCAN-IT output has no spatial coordinates in adata.obsm['spatial']."
-        if "scanit_louvain" not in a.obs.columns:
-            return "SCAN-IT output has no obs['scanit_louvain'] column."
-        return "Showing SCAN-IT clusters (scanit_louvain)."
+            return "No data loaded."
+        if "spatial" not in a.obsm:
+            return "No spatial coordinates."
+        if "scanit" not in a.obs.columns:
+            return "No SCAN-IT result yet (obs['scanit'] missing). Run SCAN-IT first."
+        return "Showing SCAN-IT clusters (obs['scanit'])."
 
     @output
     @render.plot
     def scanit_plot():
-        a = scanit_result_adata()
-        if a is None:
-            return
-        if "spatial" not in a.obsm.keys() or "scanit_louvain" not in a.obs.columns:
-            return
-
-        coords = a.obsm["spatial"]
-        x = coords[:, 0]
-        y = coords[:, 1]
-
-        clusters = a.obs["scanit_louvain"].astype("category")
-        codes = clusters.cat.codes.to_numpy()
-
-        fig, ax = plt.subplots(figsize=(5, 5))
-        sc_plt = ax.scatter(x, y, c=codes, s=12, alpha=0.9)
-
-        handles = []
-        max_code = codes.max() if codes.size else 0
-        for cat_value in clusters.cat.categories:
-            idxs = np.where(clusters.to_numpy() == cat_value)[0]
-            if len(idxs) == 0:
-                continue
-            idx = idxs[0]
-            norm_value = codes[idx] / max_code if max_code > 0 else 0
-            color = sc_plt.cmap(norm_value)
-            handles.append(
-                plt.Line2D([], [], marker="o", color=color, linestyle="",
-                           label=str(cat_value), markersize=6)
-            )
-
-        ax.legend(handles=handles, title="scanit_louvain", bbox_to_anchor=(1.05, 1), loc="upper left")
-
-        ax.set_title("scanit_louvain")
-        ax.set_xlabel("x")
-        ax.set_ylabel("y")
-        ax.invert_yaxis()
-        ax.set_aspect("equal", "box")
-        return fig
+        a = adata()
+        fig = plot_spatial_clusters(a, "scanit", "SCAN-IT clusters")
+        if fig is not None:
+            return fig
 
     # -----------------------
     # GraphST result plotting
     # -----------------------
-    @reactive.Calc
-    def graphst_result_adata():
-        res = tools_result.get()
-        r = res.get("graphst") if isinstance(res, dict) else None
-        out_path = r.get("output") if (r and r.get("ok")) else None
-
-        if not out_path:
-            return None
-
-        p = Path(out_path)
-        if not p.exists():
-            return None
-
-        return sc.read_h5ad(str(p))
-
     @output
     @render.text
     def graphst_plot_info():
-        a = graphst_result_adata()
+        a = adata()
         if a is None:
-            return "No GraphST result yet. Run GraphST first."
-
-        if "spatial" not in a.obsm.keys():
-            return "GraphST output has no spatial coordinates in adata.obsm['spatial']."
-
-        if "graphst_cluster" not in a.obs.columns:
-            return "GraphST output has no obs['graphst_cluster'] column."
-
-        return "Showing GraphST clusters (graphst_cluster)."
+            return "No data loaded."
+        if "spatial" not in a.obsm:
+            return "No spatial coordinates."
+        if "graphst" not in a.obs.columns:
+            return "No GraphST result yet (obs['graphst'] missing). Run GraphST first."
+        return "Showing GraphST clusters (obs['graphst'])."
 
     @output
     @render.plot
     def graphst_plot():
-        a = graphst_result_adata()
-        if a is None:
-            return
-
-        if "spatial" not in a.obsm.keys() or "graphst_cluster" not in a.obs.columns:
-            return
-
-        coords = a.obsm["spatial"]
-        x = coords[:, 0]
-        y = coords[:, 1]
-
-        clusters = a.obs["graphst_cluster"].astype("category")
-        codes = clusters.cat.codes.to_numpy()
-
-        fig, ax = plt.subplots(figsize=(5, 5))
-        sc_plt = ax.scatter(x, y, c=codes, s=12, alpha=0.9)
-
-        handles = []
-        max_code = codes.max() if codes.size else 0
-        for cat_value in clusters.cat.categories:
-            idxs = np.where(clusters.to_numpy() == cat_value)[0]
-            if len(idxs) == 0:
-                continue
-            idx = idxs[0]
-            norm_value = codes[idx] / max_code if max_code > 0 else 0
-            color = sc_plt.cmap(norm_value)
-            handles.append(
-                plt.Line2D([], [], marker="o", color=color,
-                        linestyle="", label=str(cat_value), markersize=6)
-            )
-
-        ax.legend(
-            handles=handles,
-            title="graphst_cluster",
-            bbox_to_anchor=(1.05, 1),
-            loc="upper left",
-        )
-
-        ax.set_title("graphst_cluster")
-        ax.set_xlabel("x")
-        ax.set_ylabel("y")
-        ax.invert_yaxis()
-        ax.set_aspect("equal", "box")
-        return fig
+        a = adata()
+        fig = plot_spatial_clusters(a, "graphst", "GraphST clusters")
+        if fig is not None:
+            return fig
 
     # -----------------------
     # stLearn result plotting
     # -----------------------
-    @reactive.Calc
-    def stlearn_result_adata():
-        res = tools_result.get()
-        r = res.get("stlearn") if isinstance(res, dict) else None
-        out_path = r.get("output") if (r and r.get("ok")) else None
-
-        if not out_path:
-            return None
-
-        p = Path(out_path)
-        if not p.exists():
-            return None
-
-        return sc.read_h5ad(str(p))
-
     @output
     @render.text
     def stlearn_plot_info():
-        a = stlearn_result_adata()
+        a = adata()
         if a is None:
-            return "No stLearn result yet. Run stLearn first."
-
-        if "spatial" not in a.obsm.keys():
-            return "stLearn output has no spatial coordinates in adata.obsm['spatial']."
-
-        if "stlearn_louvain" not in a.obs.columns:
-            return "stLearn output has no obs['stlearn_louvain'] column."
-
-        return "Showing stLearn clusters (stlearn_louvain)."
+            return "No data loaded."
+        if "spatial" not in a.obsm:
+            return "No spatial coordinates."
+        if "stlearn" not in a.obs.columns:
+            return "No stLearn result yet (obs['stlearn'] missing). Run stLearn first."
+        return "Showing stLearn clusters (obs['stlearn'])."
 
     @output
     @render.plot
     def stlearn_plot():
-        a = stlearn_result_adata()
-        if a is None:
-            return
+        a = adata()
+        fig = plot_spatial_clusters(a, "stlearn", "stLearn clusters")
+        if fig is not None:
+            return fig
 
-        if "spatial" not in a.obsm.keys() or "stlearn_louvain" not in a.obs.columns:
-            return
-
-        coords = a.obsm["spatial"]
-        x = coords[:, 0]
-        y = coords[:, 1]
-
-        clusters = a.obs["stlearn_louvain"].astype("category")
-        codes = clusters.cat.codes.to_numpy()
-
-        fig, ax = plt.subplots(figsize=(5, 5))
-        sc_plt = ax.scatter(x, y, c=codes, s=12, alpha=0.9)
-
-        handles = []
-        max_code = codes.max() if codes.size else 0
-        for cat_value in clusters.cat.categories:
-            idxs = np.where(clusters.to_numpy() == cat_value)[0]
-            if len(idxs) == 0:
-                continue
-            idx = idxs[0]
-            norm_value = codes[idx] / max_code if max_code > 0 else 0
-            color = sc_plt.cmap(norm_value)
-            handles.append(
-                plt.Line2D([], [], marker="o", color=color,
-                        linestyle="", label=str(cat_value), markersize=6)
-            )
-
-        ax.legend(
-            handles=handles,
-            title="stlearn_louvain",
-            bbox_to_anchor=(1.05, 1),
-            loc="upper left",
-        )
-
-        ax.set_title("stlearn_louvain")
-        ax.set_xlabel("x")
-        ax.set_ylabel("y")
-        ax.invert_yaxis()
-        ax.set_aspect("equal", "box")
-        return fig
 
 
 

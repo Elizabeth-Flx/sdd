@@ -1,4 +1,4 @@
-import dataloader as dl
+from . import dataloader as dl
 import argparse
 import scanpy as sc
 import os
