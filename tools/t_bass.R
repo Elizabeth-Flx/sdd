@@ -39,7 +39,7 @@ BASS_obj <- BASS.run(BASS_obj)
 BASS_obj <- BASS.postprocess(BASS_obj)
 
 domains <- BASS_obj@results$z[[1]]   # spatial domain labels
-colData$BASS_domain <- domains
+colData$spatial_cluster <- domains
 
 colData$barcode <- rownames(colData)
-write.csv(colData[c("barcode", "BASS_domain")], output_file, row.names = FALSE)
+write.csv(colData[c("barcode", "spatial_cluster")], output_file, row.names = FALSE)
