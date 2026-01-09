@@ -12,26 +12,31 @@ def add_cluster(adata, cluster_path, cluster_name):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Add clustering results to AnnData object.")
-    parser.add_argument("--user", type=str, required=True, help="User name for file paths.")
-    parser.add_argument('--clusters_names', type=list, nargs='*', default=[], help='List of cluster names to combine')
+    
+    parser.add_argument("--input", type=str, required=True, help="Input anndata file")
+    parser.add_argument("--csv_dir", type=str, required=True, help="Input csv directory")
+    parser.add_argument("--output", type=str, required=True, help="Output anndata file")   
+    
+    parser.add_argument("--clusters_names", nargs='*', default=[], help="List of cluster names to add (without .csv). If empty, all clusters in the directory will be added.")
+     
     args = parser.parse_args()
 
-    adata = dl.open_anndata("../files/" + args.user + "/anndata.h5ad")
+    adata = dl.open_anndata(args.input)
     
     # adata = dl.shared_preprocessing(adata)
     
     if len(args.clusters_names) == 0:
         # if no clusters provided use all in directory
-        cluster_files = os.listdir("../files/" + args.user + "/clusters/")
+        cluster_files = os.listdir(args.csv_dir)
         
         for file in cluster_files:
             print("Combining " + file)
             cluster_name = file.split(".csv")[0]
-            adata = add_cluster(adata, "../files/" + args.user + "/clusters/" + file, cluster_name)
+            adata = add_cluster(adata, args.csv_dir + "/" + file, cluster_name)
     else:
         for cluster_name in args.clusters_names:
             print("Combining " + cluster_name)
-            cluster_path = args.user + "/clusters/" + cluster_name + ".csv"
-            adata = add_cluster(adata, "../files/" + cluster_path, cluster_name)
-        
-    adata.write_h5ad("../files/" + args.user + "/anndata_combined.h5ad")
+            cluster_path = args.csv_dir + "/" + cluster_name + ".csv"
+            adata = add_cluster(adata, cluster_path, cluster_name)
+
+    adata.write_h5ad(args.output)
