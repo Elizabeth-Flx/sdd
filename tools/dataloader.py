@@ -101,10 +101,3 @@ def save_cluster(user, adata, index_name, cluster_name):
         "spatial_cluster": adata.obs[index_name]
     })
     clusters.to_csv("../files/" + user + "/clusters/" + cluster_name + ".csv", index=False)
-    
-def add_cluster_to_adata(adata_path, cluster_path, cluster_name, output_path):
-    adata = sc.read_h5ad(adata_path)
-    clusters = pd.read_csv(cluster_path)
-    adata.obs[cluster_name] = clusters.loc[adata.obs_names, "spatial_cluster"]
-    adata.write_h5ad(output_path)
-    
