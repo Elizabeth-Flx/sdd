@@ -2,7 +2,6 @@ import dataloader as dl
 import stlearn as st
 import argparse
 
-
 def preprocessing(adata):
 
     # Spatially-aware normalization and PCA
@@ -35,12 +34,13 @@ def cluster(adata, n_clusters=19, louvain_resolution=1.19):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process single-cell spatial transcriptomics data with STLearn.")
-    parser.add_argument("--input", type=str, required=True, help="Name of the input AnnData file.")
+    parser.add_argument("--user", type=str, required=True, help="User name for file paths.")
+    # parser.add_argument("--input", type=str, required=True, help="Name of the input AnnData file.")
     parser.add_argument("--n_clusters", type=int, default=19, help="Number of clusters for k-means.")
     parser.add_argument("--louvain_resolution", type=float, default=1.19, help="Resolution parameter for Louvain clustering.")
     args = parser.parse_args()
-
-    adata = dl.open_anndata("../files/" + args.input)
+    
+    adata = dl.open_anndata("../files/" + args.user + "/anndata.h5ad")
     adata = dl.shared_preprocessing(adata)
 
     adata = preprocessing(adata)
@@ -48,6 +48,4 @@ if __name__ == "__main__":
 
     print(adata)
 
-    output = "../files/stlearn_" + args.input
-
-    adata.write_h5ad(output)
+    dl.save_cluster(args.user, adata, "stlearn_louvain", "stlearn")

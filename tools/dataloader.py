@@ -1,5 +1,9 @@
 import scanpy as sc
 import argparse
+import scipy.sparse as sp
+import pandas as pd
+from pathlib import Path
+
 
 
 def load_data(file_path, file_type='h5ad'):
@@ -60,3 +64,47 @@ def shared_preprocessing(adata):
     sc.pp.scale(adata, max_value=10)
 
     return adata
+
+def create_csvs(adata_path):
+    adata = sc.read_h5ad(adata_path)
+    X = adata.X
+    
+    if sp.issparse(X):
+        countData = pd.DataFrame.sparse.from_spmatrix(
+            X.T,
+            index=adata.var_names,
+            columns=adata.obs_names
+        )
+    else:
+        countData = pd.DataFrame(
+            X.T,
+            index=adata.var_names,
+            columns=adata.obs_names
+        )
+        
+    rowData = adata.var.copy()
+    rowData.insert(0, "gene_id", rowData.index)
+
+    colData = adata.obs.copy()
+    
+    countData.to_csv("../files/csv/counts.csv.gz", compression="gzip")
+    rowData.to_csv("../files/csv/rowData.csv")
+    colData.to_csv("../files/csv/colData.csv")
+    
+def save_cluster(user, adata, index_name, cluster_name):
+    
+    # check if directory exists for clusters, if not create it
+    Path("../files/" + user + "/clusters/").mkdir(parents=True, exist_ok=True)
+    
+    clusters = pd.DataFrame({
+        "barcode": adata.obs_names,
+        "spatial_cluster": adata.obs[index_name]
+    })
+    clusters.to_csv("../files/" + user + "/clusters/" + cluster_name + ".csv", index=False)
+    
+def add_cluster_to_adata(adata_path, cluster_path, cluster_name, output_path):
+    adata = sc.read_h5ad(adata_path)
+    clusters = pd.read_csv(cluster_path)
+    adata.obs[cluster_name] = clusters.loc[adata.obs_names, "spatial_cluster"]
+    adata.write_h5ad(output_path)
+    

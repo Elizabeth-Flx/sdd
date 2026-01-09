@@ -13,6 +13,13 @@ def train_model(adata, device=torch.device('cpu')):
         alpha_n_layer=2,
         knn_n_neighbors=15
     )
+        
+    if isinstance(adata.X, (np.ndarray)):
+        X_dense = adata.X
+    else:
+        X_dense = adata.X.toarray()
+
+    adata.X = X_dense
 
     scanit.tl.spatial_representation(
         adata,
@@ -39,21 +46,19 @@ def cluster(adata,  louvain_resolution=1.19):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process single-cell spatial transcriptomics data with STLearn.")
-    parser.add_argument("--input", type=str, required=True, help="Name of the input AnnData file.")
+    parser.add_argument("--user", type=str, required=True, help="User name for file paths.")
+    # parser.add_argument("--input", type=str, required=True, help="Name of the input AnnData file.")
     # parser.add_argument("--n_clusters", type=int, default=19, help="Number of clusters for k-means.")
     parser.add_argument("--louvain_resolution", type=float, default=1.19, help="Resolution parameter for Louvain clustering.")
     args = parser.parse_args()
 
     device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
 
-    adata = dl.open_anndata("../files/" + args.input)
-    adata = dl.shared_preprocessing(adata)
+    adata = dl.open_anndata("../files/" + args.user + "/anndata.h5ad")
 
     adata = train_model(adata, device)
     adata = cluster(adata, louvain_resolution=args.louvain_resolution)
 
     print(adata)
 
-    output = "../files/scanit_" + args.input
-
-    adata.write_h5ad(output)
+    dl.save_cluster(args.user, adata, "scanit_louvain", "scanit")

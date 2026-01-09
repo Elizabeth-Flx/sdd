@@ -34,7 +34,8 @@ def cluster(adata, n_clusters, radius):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process single-cell spatial transcriptomics data with STLearn.")
-    parser.add_argument("--input", type=str, required=True, help="Name of the input AnnData file.")
+    parser.add_argument("--user", type=str, required=True, help="User name for file paths.")
+    # parser.add_argument("--input", type=str, required=True, help="Name of the input AnnData file.")
     parser.add_argument("--n_clusters", type=int, default=12, help="Number of clusters for clustering.")
     parser.add_argument("--radius", type=float, default=50, help="Radius for spatial graph construction.")
     args = parser.parse_args()
@@ -47,7 +48,7 @@ if __name__ == "__main__":
     os.environ['R_HOME'] = os.path.join(conda_env, "lib/R")
     os.environ['PATH'] = os.path.join(conda_env, "bin") + ":" + os.environ['PATH']
 
-    adata = dl.open_anndata("../files/" + args.input)
+    adata = dl.open_anndata("../files/" + args.user + "/anndata.h5ad")
     adata = dl.shared_preprocessing(adata)
 
     adata = train_model(adata, device)
@@ -55,6 +56,4 @@ if __name__ == "__main__":
 
     print(adata)
 
-    output = "../files/graphst_" + args.input
-
-    adata.write_h5ad(output)
+    dl.save_cluster(args.user, adata, "graphst_cluster", "graphst")
