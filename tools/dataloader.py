@@ -65,32 +65,6 @@ def shared_preprocessing(adata):
 
     return adata
 
-def create_csvs(adata_path, csv_dir="../files/csv/"):
-    adata = sc.read_h5ad(adata_path)
-    X = adata.X
-    
-    if sp.issparse(X):
-        countData = pd.DataFrame.sparse.from_spmatrix(
-            X.T,
-            index=adata.var_names,
-            columns=adata.obs_names
-        )
-    else:
-        countData = pd.DataFrame(
-            X.T,
-            index=adata.var_names,
-            columns=adata.obs_names
-        )
-        
-    rowData = adata.var.copy()
-    rowData.insert(0, "gene_id", rowData.index)
-
-    colData = adata.obs.copy()
-
-    countData.to_csv(csv_dir + "counts.csv.gz", compression="gzip")
-    rowData.to_csv(csv_dir + "rowData.csv")
-    colData.to_csv(csv_dir + "colData.csv")
-
 def save_cluster(output_path, adata, index_name):
     
     # check if directory exists for clusters, if not create it
