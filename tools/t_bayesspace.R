@@ -8,10 +8,13 @@ args <- commandArgs(trailingOnly = TRUE)
 # args[1] : input directory containing rowData.csv, colData.csv, counts.csv.gz
 # args[2] : output file to save clustering results (csv)
 
+input_dir <- args[1]
+output_file <- args[2]
 
-rowData <- read.csv(paste0(args[1], "/rowData.csv"), stringsAsFactors=FALSE)
-colData <- read.csv(paste0(args[1], "/colData.csv"), stringsAsFactors=FALSE, row.names=1)
-counts <-  read.csv(paste0(args[1], "/counts.csv.gz"),
+
+rowData <- read.csv(paste0(input_dir, "/rowData.csv"), stringsAsFactors=FALSE)
+colData <- read.csv(paste0(input_dir, "/colData.csv"), stringsAsFactors=FALSE, row.names=1)
+counts <-  read.csv(paste0(input_dir, "/counts.csv.gz"),
                    row.names=1, check.names=F, stringsAsFactors=FALSE)
 
 counts <- as.matrix(counts)
@@ -37,4 +40,4 @@ clusters <- data.frame(
   barcode = colnames(sce),
   spatial_cluster = sce$spatial.cluster
 )
-write.csv(clusters, args[2], row.names = FALSE)
+write.csv(clusters, output_file, row.names = FALSE)
