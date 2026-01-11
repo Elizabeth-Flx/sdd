@@ -62,30 +62,6 @@ def run_tangram(ad_rna, ad_sp, ad_atac_genes):
     return ad_ge, annotation_list
 
 
-# def gene_projection(ad_map, ad_atac_genes):
-#     # Change obs of ad_atac_genes to the barcode column in obs
-#     ad_atac_genes.obs_names = ad_atac_genes.obs["barcode"].values
-#     ad_atac_genes.obs.index = ad_atac_genes.obs_names
-#     common_cells = ad_map.obs_names.intersection(ad_atac_genes.obs_names)
-#     common_cells = sorted(list(common_cells))  # Ensure same order
-#     shared_index = pd.Index(common_cells, dtype="str", name=None)
-#     print(f"Number of common cells for gene projection: {len(shared_index)}")
-#     ad_map_sub = ad_map[shared_index].copy()
-#     ad_atac_genes_sub = ad_atac_genes[shared_index].copy()
-
-#     ad_map_sub.obs_names = shared_index
-#     ad_atac_genes_sub.obs_names = shared_index
-#     ad_map_sub.obs.index = shared_index
-#     ad_atac_genes_sub.obs.index = shared_index
-#     # Double-check
-#     print("All index values match:", all(ad_map_sub.obs.index == ad_atac_genes_sub.obs.index))
-#     print("Index objects are the same:", ad_map_sub.obs.index is ad_atac_genes_sub.obs.index)
-#     print("obs_names objects are the same:", ad_map_sub.obs_names is ad_atac_genes_sub.obs_names)
-
-#     tg.utils.project_genes(ad_map_sub, ad_atac_genes_sub)
-#     return ad_map_sub
-
-
 def plot_tangram_results(ad_map, ad_sp, ad_rna, annotation_list, plot_path):
 
     tg.plot_cell_annotation_sc(ad_map, annotation_list, x='x', y='y',spot_size= 60, scale_factor=0.1, perc=0.02)   # type:ignore
@@ -126,8 +102,3 @@ if __name__ == "__main__":
     # Copy sp file to output dir
     # output_spatial_path = f"{args.output_dir}/c_sp_ad.h5ad"
     # shutil.copy(f"{args.input_dir}/c_sp_ad.h5ad", output_spatial_path)
-
-    # plot_path = f"{args.output_dir}/figures/"
-    # # Create directory if it doesn't exist
-    # os.makedirs(plot_path, exist_ok=True)
-    # plot_tangram_results(ad_map, ad_sp, ad_rna, annotation_list, plot_path)

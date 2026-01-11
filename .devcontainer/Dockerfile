@@ -16,8 +16,6 @@ RUN apt-get update \
 # wieder auf mambauser zurück (wie im micromamba-Image vorgesehen)
 USER mambauser
 
-
-
 # ---- shiny ----
 COPY --chown=mambauser:mambauser envs/shiny_env.yml /tmp/envs/shiny_env.yml
 RUN micromamba create -y -f /tmp/envs/shiny_env.yml -n shiny

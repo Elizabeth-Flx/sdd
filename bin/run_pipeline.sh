@@ -7,13 +7,22 @@ DATA_DIR="$1"
 GRAPHST_ENV="$2"
 SCANIT_ENV="$3"
 STLEARN_ENV="$4"
-COMPARE_ENV="$5"
+VIS_ENV="$5"
+COMPARE_ENV="$6"
 
 IN_DIR="$DATA_DIR/shareseq"
 SHARESEQ_PROC_DIR="$DATA_DIR/shareseq_processed"
 TANGRAM_OUT_DIR="$DATA_DIR/tangram_output"
 TOOLS_OUT_DIR="$DATA_DIR/tools"
 TOOL_NAMES=("graphst" "scanit" "stlearn")
+
+# Tool name - cluster key mapping, one tool can have multiple cluster keys
+declare -A TOOL_CLUSTER_KEYS
+TOOL_CLUSTER_KEYS["graphst"]="mclust"
+TOOL_CLUSTER_KEYS["scanit"]="scanit_louvain"
+TOOL_CLUSTER_KEYS["stlearn"]="stlearn_kmeans"
+TOOL_CLUSTER_KEYS["stlearn"]="stlearn_louvain"
+
 
 echo "Input Directory: $IN_DIR"
 echo "Shareseq Processed Directory: $SHARESEQ_PROC_DIR"
@@ -52,7 +61,6 @@ python3 bin/t_scanit.py --input_h5ad "$TANGRAM_OUT_DIR/c_sp_ad.h5ad" --output_h5
 echo "Running Scanit on Tangram-mapped data..."
 python3 bin/t_scanit.py --input_h5ad "$TANGRAM_OUT_DIR/sp_atac.h5ad" --output_h5ad "$TOOLS_OUT_DIR/$TOOL_NAME/sp_atac_scanit.h5ad"
 
-
 # Stlearn on on spatial and Tangram-mapped data
 TOOL_NAME="stlearn"
 echo "Running Stlearn on spatial data..."
@@ -64,15 +72,39 @@ echo "Running Stlearn on Tangram-mapped data..."
 python3 bin/t_stlearn.py --input_h5ad "$TANGRAM_OUT_DIR/sp_atac.h5ad" --output_h5ad "$TOOLS_OUT_DIR/$TOOL_NAME/sp_atac_stlearn.h5ad"
 
 
+# Switch to visualization environment
+source ~/miniforge3/bin/activate "$VIS_ENV"
+
+# 3. Visualizations
+echo "Generating visualizations..."
+# Iterate over mapping
+for TOOL_NAME in "${TOOL_NAMES[@]}"; do
+    # If the tool is stlearn, we have to switch back to the stlearn environment
+    if [ "$TOOL_NAME" == "stlearn" ]; then
+        echo "Activating Stlearn conda environment for visualization: $STLEARN_ENV"
+        source ~/miniforge3/bin/activate "$STLEARN_ENV"
+    fi
+    # For each cluster key associated with the tool
+    for key in ${TOOL_CLUSTER_KEYS[$TOOL_NAME]}; do
+        echo "Generating visualizations for tool: $TOOL_NAME with cluster key: $key"
+        python3 bin/vis_tools.py --input_dir "$TOOLS_OUT_DIR/$TOOL_NAME" --output_dir "$TOOLS_OUT_DIR/$TOOL_NAME/figures" --clusterkey "$key"
+    done
+    # Switch back to visualization environment if we switched to stlearn
+    if [ "$TOOL_NAME" == "stlearn" ]; then
+        echo "Switching back to visualization conda environment: $VIS_ENV"
+        source ~/miniforge3/bin/activate "$VIS_ENV"
+    fi
+done
+
 # 4. (Optional) Switch to comparison environment
-echo "Activating comparison conda environment: $COMPARE_ENV"
-source ~/miniforge3/bin/activate "$COMPARE_ENV"
+# echo "Activating comparison conda environment: $COMPARE_ENV"
+# source ~/miniforge3/bin/activate "$COMPARE_ENV"
 
 # 5. Run comparison
-echo "Running clustering comparison..."
-for TOOL_NAME in "${TOOL_NAMES[@]}"; do
-    echo "Comparing results for tool: $TOOL_NAME"
-    python3 bin/compare_clustering.py --input_dir "$TOOLS_OUT_DIR/$TOOL_NAME" --output_dir "$TOOLS_OUT_DIR/$TOOL_NAME/compare_results" --tool "$TOOL_NAME"
-done
+# echo "Running clustering comparison..."
+# for TOOL_NAME in "${TOOL_NAMES[@]}"; do
+#     echo "Comparing results for tool: $TOOL_NAME"
+#     python3 bin/compare_clustering.py --input_dir "$TOOLS_OUT_DIR/$TOOL_NAME" --output_dir "$TOOLS_OUT_DIR/$TOOL_NAME/compare_results" --tool "$TOOL_NAME"
+# done
 
 echo "Pipeline complete."

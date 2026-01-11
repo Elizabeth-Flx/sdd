@@ -4,34 +4,8 @@ import scanpy as sc
 
 
 
-def preprocessing(adata):
-    # Preprocessing
-    st.pp.filter_genes(adata, min_cells=3)
-    st.pp.normalize_total(adata, target_sum=1e4)
-    st.pp.log1p(adata)
-    st.pp.scale(adata, max_value=10)
-
-    # Spatially-aware normalization and PCA
-    print(adata.obsm.keys())
-    adata.obs["imagerow"] = adata.obsm["spatial"][:, 1]
-    adata.obs["imagecol"] = adata.obsm["spatial"][:, 0]
-    
-    # adata.obsm["X_morphology"] = adata.obsm["features"]
-
-    st.em.run_pca(adata, n_comps=50)
-
-    # st.spatial.SME.SME_normalize(adata, use_data="raw")
-    # adata.X = adata.obsm['raw_SME_normalized']
-    # st.pp.scale(adata)
-    # st.em.run_pca(adata, n_comps=50)
-    
-    return adata
-
-
 def preprocessing_atac(adata):
     # Preprocessing for ATAC data
-    st.pp.filter_genes(adata, min_cells=3)
-    # st.pp.normalize_total(adata, target_sum=1e4)
     st.pp.scale(adata, max_value=10)
 
     # PCA
@@ -69,10 +43,7 @@ if __name__ == "__main__":
 
     adata = sc.read_h5ad(args.input_h5ad)
 
-    if 'atac' in args.input_h5ad.lower():
-        adata = preprocessing_atac(adata)
-    else:
-        adata = preprocessing(adata)
+    adata = preprocessing_atac(adata)
     adata = cluster(adata, n_clusters=args.n_clusters, louvain_resolution=args.louvain_resolution)
 
     output = args.output_h5ad # if args.output_h5ad else "../files/stlearn_" + args.input_h5ad

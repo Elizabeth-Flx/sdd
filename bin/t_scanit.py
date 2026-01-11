@@ -6,10 +6,6 @@ import argparse
 import torch
 
 def preprocessing(adata):
-    # Preprocessing
-    sc.pp.normalize_total(adata)  # type: ignore
-    sc.pp.log1p(adata)  # type: ignore
-    sc.pp.scale(adata)  # type: ignore
 
     sc.pp.highly_variable_genes(adata, flavor="cell_ranger", n_top_genes=3000)  # type: ignore
     adata = adata[:, adata.var["highly_variable"]]
