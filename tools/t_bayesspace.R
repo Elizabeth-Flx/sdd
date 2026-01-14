@@ -7,9 +7,11 @@ args <- commandArgs(trailingOnly = TRUE)
 # Arguments
 # args[1] : input directory containing rowData.csv, colData.csv, counts.csv.gz
 # args[2] : output file to save clustering results (csv)
+# args[3] : do normlog (TRUE/FALSE)
 
 input_dir <- args[1]
 output_file <- args[2]
+do_normlog <- as.logical(args[3])
 
 
 rowData <- read.csv(paste0(input_dir, "/rowData.csv"), stringsAsFactors=FALSE)
@@ -25,7 +27,7 @@ sce <- SingleCellExperiment(assays=list(counts=as(counts, "dgCMatrix")),
 
 set.seed(102)
 sce <- spatialPreprocess(sce, platform="ST", 
-                              n.PCs=7, n.HVGs=2000, log.normalize=TRUE)
+                              n.PCs=7, n.HVGs=2000, log.normalize=do_normlog)
 
 colData(sce)$row <- colData(sce)$array_row
 colData(sce)$col <- colData(sce)$array_col

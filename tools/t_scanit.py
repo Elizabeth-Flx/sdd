@@ -52,12 +52,16 @@ if __name__ == "__main__":
     
     # parser.add_argument("--n_clusters", type=int, default=19, help="Number of clusters for k-means.")
     parser.add_argument("--louvain_resolution", type=float, default=1.19, help="Resolution parameter for Louvain clustering.")
+    parser.add_argument("--do_normlog", type=bool, default=True, help="Whether to perform preprocessing.")
+
     args = parser.parse_args()
 
     device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
 
     adata = dl.open_anndata(args.input)
 
+    adata = dl.shared_preprocessing(adata, args.do_normlog)
+    
     adata = train_model(adata, device)
     adata = cluster(adata, louvain_resolution=args.louvain_resolution)
 

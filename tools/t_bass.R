@@ -5,9 +5,11 @@ args <- commandArgs(trailingOnly = TRUE)
 # Arguments
 # args[1] : input directory containing rowData.csv, colData.csv, counts.csv.gz
 # args[2] : output file to save clustering results (csv)
+# args[3] : do normlog (TRUE/FALSE)
 
 input_dir <- args[1]
 output_file <- args[2]
+do_normlog <- as.logical(args[3])  
 
 rowData <- read.csv(paste0(input_dir, "/rowData.csv"), stringsAsFactors=FALSE)
 colData <- read.csv(paste0(input_dir, "/colData.csv"), stringsAsFactors=FALSE, row.names=1)
@@ -34,7 +36,8 @@ BASS_obj <- createBASSObject(
   beta_method = "SW"   # or "fix" for large datasets
 )
 
-BASS_obj <- BASS.preprocess(BASS_obj)
+if 
+BASS_obj <- BASS.preprocess(BASS_obj, doLogNormalize = do_preprocess)
 BASS_obj <- BASS.run(BASS_obj)
 BASS_obj <- BASS.postprocess(BASS_obj)
 
