@@ -42,16 +42,16 @@ def open_anndata(file_path):
     adata = sc.read_h5ad(file_path)
     return adata
 
-def shared_preprocessing(adata):
+def shared_preprocessing(adata, do_normlog=True):
     # Basic filtering
     sc.pp.filter_genes(adata, min_cells=3)
 
-    # Library size normalization
-    sc.pp.normalize_total(adata, target_sum=1e4)
-
-    # Log transform
-    sc.pp.log1p(adata)
-
+    if do_normlog:
+        # Library size normalization
+        sc.pp.normalize_total(adata, target_sum=1e4)
+        # Log transform
+        sc.pp.log1p(adata)
+    
     # Highly variable genes (important!)
     sc.pp.highly_variable_genes(
         adata,

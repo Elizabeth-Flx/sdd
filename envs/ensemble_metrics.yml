@@ -25,4 +25,3 @@ dependencies:
   - scib
   - ipykernel
   - python-louvain
-prefix: /nfs/home/students/s.reif/miniforge3/envs/sdd-metrics-real
