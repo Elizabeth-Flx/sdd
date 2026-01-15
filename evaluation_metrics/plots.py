@@ -193,6 +193,8 @@ def plot_metric_boxplots_gg(metric_df, metric_name, save_path):
     p.save(os.path.join(save_path, f'{metric_name}_boxplot.png'))
     return p
 
+# 
+
 # Lineplots 
 def plot_metric_lineplot_datasets_gg(metric_df, metric_name, save_path):
     p = (ggplot(metric_df, aes(x='Dataset', y=metric_name, color=metric_name, group='Method')) +
@@ -208,7 +210,7 @@ def plot_metric_lineplot_datasets_gg(metric_df, metric_name, save_path):
     return p
 
 # mean lineplots of all metrics per datasets
-def plot_means_lineplot(mean_df, save_path):
+def plot_means_lineplot(mean_df, save_path, title):
     # long format: Method | Metric | Mean_Score
     df_long = mean_df.melt(id_vars=["Method"], var_name="Metric", value_name="Mean_Score")
 
@@ -216,7 +218,7 @@ def plot_means_lineplot(mean_df, save_path):
         ggplot(df_long, aes(x="Method", y="Mean_Score", color="Metric", group="Metric"))
         + geom_line(size=1)
         + geom_point(size=2)
-        + ggtitle("Mean Metric Scores by Method")
+        + ggtitle(title)
         + xlab("Method")
         + ylab("Mean score")
         + theme(axis_text_x=element_text(rotation=45, hjust=1))
@@ -224,7 +226,7 @@ def plot_means_lineplot(mean_df, save_path):
 
     # show + save
     print(p)
-    p.save(os.path.join(save_path, "mean_metrics_lineplot.png"), dpi=300)
+    p.save(os.path.join(save_path, f"{title}.png"), dpi=300)
 
     return p
     
