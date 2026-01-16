@@ -6,10 +6,15 @@ args <- commandArgs(trailingOnly = TRUE)
 # args[1] : input directory containing rowData.csv, colData.csv, counts.csv.gz
 # args[2] : output file to save clustering results (csv)
 # args[3] : do normlog (TRUE/FALSE)
+# args[4] : k_clusters (optional, default 12)
+# args[5] : n_topics (optional, default 15)
 
-input_dir <- args[1]
+input_dir   <- args[1]
 output_file <- args[2]
-do_normlog <- as.logical(args[3])  
+do_normlog  <- as.logical(args[3])  
+k_clusters  <- if(length(args) >= 4) as.integer(args[4]) else 12   # default 12
+n_topics    <- if(length(args) >= 5) as.integer(args[5]) else 15  # default 15
+
 
 rowData <- read.csv(paste0(input_dir, "/rowData.csv"), stringsAsFactors=FALSE)
 colData <- read.csv(paste0(input_dir, "/colData.csv"), stringsAsFactors=FALSE, row.names=1)
@@ -31,8 +36,8 @@ xy <- list(
 BASS_obj <- createBASSObject(
   X = X,
   xy = xy,
-  C = 15,          # choose based on biology
-  R = 4,           # number of spatial domains
+  C = n_topics,          # choose based on biology
+  R = k_clusters,           # number of spatial domains
   beta_method = "SW"   # or "fix" for large datasets
 )
 
