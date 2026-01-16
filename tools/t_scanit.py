@@ -35,11 +35,17 @@ def train_model(adata, device=torch.device('cpu')):
     )
     return adata
 
-def cluster(adata, louvain_resolution=1.19):
+def cluster(adata, 
+            cluster_method="leiden", 
+            resolution=1.0,
+            n_neighbors=15):
 
-    # Clustering with louvain
-    sc.pp.neighbors(adata, use_rep="X_scanit", n_neighbors=15)
-    sc.tl.leiden(adata, resolution=louvain_resolution, key_added="scanit_louvain")
+    if cluster_method == "louvain":
+        sc.pp.neighbors(adata, use_rep="X_scanit", n_neighbors=n_neighbors)
+        sc.tl.louvain(adata, resolution=resolution, key_added="scanit_cluster")
+    elif cluster_method == "leiden":
+        sc.pp.neighbors(adata, use_rep="X_scanit", n_neighbors=n_neighbors)
+        sc.tl.leiden(adata, resolution=resolution, key_added="scanit_cluster")
 
     return adata
 
@@ -50,9 +56,9 @@ if __name__ == "__main__":
     parser.add_argument("--input", type=str, required=True, help="Input anndata file")
     parser.add_argument("--output", type=str, required=True, help="Output csv file")    
     
-    # parser.add_argument("--n_clusters", type=int, default=19, help="Number of clusters for k-means.")
-    parser.add_argument("--n_clusters", type=int, default=12, help="Number of clusters for clustering.")
-    parser.add_argument("--louvain_resolution", type=float, default=1.19, help="Resolution parameter for Louvain clustering.")
+    parser.add_argument("--cluster_method", type=str, default="leiden", help="Clustering method: leiden, louvain.")
+    parser.add_argument("--resolution", type=float, default=1.0, help="Resolution parameter for Louvain clustering.")
+    parser.add_argument("--n_neighbors", type=int, default=19, help="Number of neighbors for graph construction.")
     parser.add_argument("--do_normlog", type=bool, default=True, help="Whether to perform preprocessing.")
 
     args = parser.parse_args()
@@ -64,6 +70,6 @@ if __name__ == "__main__":
     adata = dl.shared_preprocessing(adata, args.do_normlog)
     
     adata = train_model(adata, device)
-    adata = cluster(adata, louvain_resolution=args.louvain_resolution)
+    adata = cluster(adata, cluster_method=args.cluster_method, resolution=args.resolution, n_neighbors=args.n_neighbors)
 
-    dl.save_cluster(args.output, adata, "scanit_louvain")
+    dl.save_cluster(args.output, adata, "scanit_cluster")

@@ -37,9 +37,6 @@ def cluster(adata,
         sc.pp.neighbors(adata, use_rep="emb")
         sc.tl.louvain(adata, resolution=resolution, key_added="domain")
 
-    
-    
-    
     # rename obs: domain to obs:graphst_cluster
     adata.obs['graphst_cluster'] = adata.obs['domain'].astype("category")
 
