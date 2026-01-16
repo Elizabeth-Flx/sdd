@@ -13,9 +13,10 @@ import argparse
 parser = argparse.ArgumentParser(description="Generating ensemble domain detection clusters.")
 
 parser.add_argument("--input_csvs", type=str, required=True, help="Input tool csv files directory")
-
+parser.add_argument('--cluster_k', type=int, required=False, default=12, help='Number of clusters for final clustering (default: 12)')
 args = parser.parse_args()
 data_path_dir = args.input_csvs
+K = args.cluster_k
 print('Input csv files directory:', data_path_dir)
 
 # for all csvs in dir: read in each csv (only one column per csv) to dataframe to use
@@ -64,7 +65,7 @@ print('finished computing consensus matrix\n')
 print("Method weights: ", w)
 H_csr = dense_similarity_to_csr_knn(H, k=5, keep_diagonal=False, make_symmetric=True, dtype=np.float32)
 print('finished building consensus kNN graph\n')
-labels, info = leiden_final(H_csr, K=12, seed=0, partition_type="rb")
+labels, info = leiden_final(H_csr, K=K, seed=0, partition_type="rb")
 print('finished Leiden clustering with \n')
 print("Leiden info: ", info)
 
