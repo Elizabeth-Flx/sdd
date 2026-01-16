@@ -24,7 +24,8 @@ def load_csvs_to_arrays(data_path, files):
             continue
 
         name = os.path.splitext(csv_file)[0]
-        csv_content = pd.read_csv(os.path.join(data_path, csv_file), header=None).to_numpy().ravel()
+        #csv_content = pd.read_csv(os.path.join(data_path, csv_file), header=None).to_numpy().ravel()
+        csv_content = pd.read_csv(os.path.join(data_path, csv_file))["spatial_cluster"].to_numpy()
         if name.lower() == "groundtruth":
             groundtruth = csv_content
         else:
@@ -32,6 +33,7 @@ def load_csvs_to_arrays(data_path, files):
         print(f"Loaded {name} from {csv_file} (n={len(csv_content)})")
 
     print(f"Total method arrays loaded: {len(dict_all_methods)}")
+    print(dict_all_methods)
     return dict_all_methods, groundtruth
 
         
