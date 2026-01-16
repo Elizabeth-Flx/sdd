@@ -17,7 +17,9 @@ dependencies:
   - leidenalg
   - ipykernel
   - scanpy
+  - python-louvain
   - pip:
       - torch
       - torch-geometric
       - git+https://github.com/zcang/SCAN-IT.git
+      - louvain

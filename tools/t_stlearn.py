@@ -21,13 +21,16 @@ def preprocessing(adata):
     return adata
 
 
-def cluster(adata, n_clusters=19, louvain_resolution=1.19):
-    # Clustering with k-means
-    st.tl.clustering.kmeans(adata, n_clusters=n_clusters, use_data="X_pca", key_added="stlearn_kmeans")
-
-    # Clustering with Louvain
-    st.pp.neighbors(adata, n_neighbors=17, use_rep='X_pca')
-    st.tl.clustering.louvain(adata, resolution=louvain_resolution, key_added="stlearn_louvain")
+def cluster(adata, cluster_method, k_clusters=12, resolution=1.0):
+    
+    if cluster_method == "kmeans":
+        st.tl.clustering.kmeans(adata, n_clusters=k_clusters, use_data="X_pca", key_added="stlearn_cluster")
+    elif cluster_method == "louvain":
+        st.pp.neighbors(adata, n_neighbors=17, use_rep='X_pca')
+        st.tl.clustering.louvain(adata, resolution=resolution, key_added="stlearn_cluster")
+    elif cluster_method == "leiden":
+        st.pp.neighbors(adata, n_neighbors=17, use_rep='X_pca')
+        st.tl.clustering.leiden(adata, resolution=resolution, key_added="stlearn_cluster")
 
     return adata
 
@@ -40,8 +43,9 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, required=True, help="Output csv file")    
     
     # parser.add_argument("--input", type=str, required=True, help="Name of the input AnnData file.")
-    parser.add_argument("--n_clusters", type=int, default=19, help="Number of clusters for k-means.")
-    parser.add_argument("--louvain_resolution", type=float, default=1.19, help="Resolution parameter for Louvain clustering.")
+    parser.add_argument("--cluster_method", type=str, default="kmeans", help="Clustering method: kmeans, leiden, louvain.")
+    parser.add_argument("--k_clusters", type=int, default=12, help="Number of clusters for k-means.")
+    parser.add_argument("--resolution", type=float, default=1.0, help="Resolution parameter for Louvain and Leiden clustering.")
     parser.add_argument("--do_normlog", type=bool, default=True, help="Whether to perform preprocessing.")
     
     args = parser.parse_args()
@@ -51,6 +55,6 @@ if __name__ == "__main__":
     adata = dl.shared_preprocessing(adata, args.do_normlog)
 
     adata = preprocessing(adata)
-    adata = cluster(adata, n_clusters=args.n_clusters, louvain_resolution=args.louvain_resolution)
+    adata = cluster(adata, cluster_method=args.cluster_method, k_clusters=args.k_clusters, resolution=args.resolution)
 
-    dl.save_cluster(args.output, adata, "stlearn_louvain")
+    dl.save_cluster(args.output, adata, "stlearn_cluster")

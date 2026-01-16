@@ -24,9 +24,11 @@ import os
 csv_files = [f for f in os.listdir(data_path_dir) if f.endswith('.csv')]
 tools_df = []
 # see if len are identical
+indices = []
 lengths = []
 for f in csv_files:
-    df = pd.read_csv(os.path.join(data_path_dir, f), header=None, index_col=None)
+    df = pd.read_csv(os.path.join(data_path_dir, f), header=0, index_col=0)
+    indices.append(df.index.tolist())
     lengths.append(df.shape[0])
     method_name = f.split('.csv')[0]
     df.columns = [method_name]
@@ -37,6 +39,11 @@ for f in csv_files:
 combined_df = pd.concat(tools_df, axis=1)
 if len(set(lengths)) != 1:
     raise ValueError("CSV files have different number of rows!")
+
+# check if all indices identical
+if not all(x == indices[0] for x in indices):
+    raise ValueError("CSV files have different indices!")
+index_list = indices[0]
 
 print("Combined dataframe shape: ", combined_df.shape)
 print("Combined dataframe tools: ", combined_df.columns.tolist())
@@ -67,14 +74,18 @@ H_csr = dense_similarity_to_csr_knn(H, k=5, keep_diagonal=False, make_symmetric=
 print('finished building consensus kNN graph\n')
 labels, info = leiden_final(H_csr, K=K, seed=0, partition_type="rb")
 print('finished Leiden clustering with \n')
-print("Leiden info: ", info)
+#print("Leiden info: ", info)
 
 # to output dataframe format
-leiden_df = pd.DataFrame(labels, index=spot_ids, columns=['leiden_clustering'])
+leiden_df = pd.DataFrame(
+    {"spatial_cluster": labels},
+    index=index_list
+)
+leiden_df.index.name = "barcode"
 
 # save to csv in same dir as input csvs
 path_ensemble = os.path.join(data_path_dir, 'ensemble.csv')
-leiden_df.to_csv(path_ensemble, header=False, index=False)
+leiden_df.to_csv(path_ensemble)
 
 print(f"Ensemble clustering labels saved to {path_ensemble}")
 print('Ensemble clustering process finished.')

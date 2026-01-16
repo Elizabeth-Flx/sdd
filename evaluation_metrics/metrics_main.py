@@ -61,7 +61,9 @@ Silhouette_spat_all = {}
 #data_path_dir = os.path.join(data_path, figures_dir)
 #dirs_in_dir = os.listdir(data_path_dir)
 
-dict_all_methods, groundtruth = load_csvs_to_arrays(csv_dir, os.listdir(csv_dir))
+
+dict_all_methods, groundtruth, ref_barcodes = load_csvs_to_arrays(csv_dir, os.listdir(csv_dir))
+
 
 # adata as file in path that ends with .h5ad
 for file in os.listdir(anndata_dir):
@@ -74,7 +76,15 @@ else:
 # want error here
     raise FileNotFoundError("No .h5ad file found in the directory.")
 
-# checking the inputs: same size of labels and adata observations
+adata.obs_names = adata.obs_names.astype(str)
+
+missing_in_adata = np.setdiff1d(ref_barcodes, adata.obs_names)
+if len(missing_in_adata) > 0:
+    raise ValueError(f"AnnData missing {len(missing_in_adata)} barcodes (e.g. {missing_in_adata[:10]})")
+
+adata = adata[ref_barcodes].copy()
+
+# sanity: now lengths must match by construction
 
 n = adata.n_obs
 for k, v in dict_all_methods.items():
