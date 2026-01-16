@@ -21,7 +21,7 @@ def preprocessing(adata):
     return adata
 
 
-def cluster(adata, cluster_method, k_clusters=15, resolution=1.0):
+def cluster(adata, cluster_method, k_clusters=12, resolution=1.0):
     
     if cluster_method == "kmeans":
         st.tl.clustering.kmeans(adata, n_clusters=k_clusters, use_data="X_pca", key_added="stlearn_cluster")
@@ -43,8 +43,8 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, required=True, help="Output csv file")    
     
     # parser.add_argument("--input", type=str, required=True, help="Name of the input AnnData file.")
-    parser.add_argument("--cluster_method", type=str, default="louvain", help="Clustering method: kmeans, leiden, louvain.")
-    parser.add_argument("--k_clusters", type=int, default=15, help="Number of clusters for k-means.")
+    parser.add_argument("--cluster_method", type=str, default="kmeans", help="Clustering method: kmeans, leiden, louvain.")
+    parser.add_argument("--k_clusters", type=int, default=12, help="Number of clusters for k-means.")
     parser.add_argument("--resolution", type=float, default=1.0, help="Resolution parameter for Louvain and Leiden clustering.")
     parser.add_argument("--do_normlog", type=bool, default=True, help="Whether to perform preprocessing.")
     
