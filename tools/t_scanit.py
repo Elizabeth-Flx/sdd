@@ -2,6 +2,7 @@ import scanpy as sc
 import scanit
 import numpy as np
 import argparse
+from sklearn.cluster import KMeans
 
 import torch
 from . import dataloader as dl
@@ -37,10 +38,14 @@ def train_model(adata, device=torch.device('cpu')):
 
 def cluster(adata, 
             cluster_method="leiden", 
+            k_clusters=12,
             resolution=1.0,
             n_neighbors=15):
 
-    if cluster_method == "louvain":
+    if cluster_method == "kmeans":
+        kmeans = KMeans(n_clusters=k_clusters, random_state=0)
+        adata.obs["scanit_cluster"] = kmeans.fit_predict(adata.obsm["X_scanit"]).astype(str)
+    elif cluster_method == "louvain":
         sc.pp.neighbors(adata, use_rep="X_scanit", n_neighbors=n_neighbors)
         sc.tl.louvain(adata, resolution=resolution, key_added="scanit_cluster")
     elif cluster_method == "leiden":
@@ -56,7 +61,8 @@ if __name__ == "__main__":
     parser.add_argument("--input", type=str, required=True, help="Input anndata file")
     parser.add_argument("--output", type=str, required=True, help="Output csv file")    
     
-    parser.add_argument("--cluster_method", type=str, default="leiden", help="Clustering method: leiden, louvain.")
+    parser.add_argument("--cluster_method", type=str, default="kmeans", help="Clustering method: kmeans, leiden, louvain.")
+    parser.add_argument("--k_clusters", type=int, default=12, help="Number of clusters for kmeans.")
     parser.add_argument("--resolution", type=float, default=1.0, help="Resolution parameter for Louvain clustering.")
     parser.add_argument("--n_neighbors", type=int, default=19, help="Number of neighbors for graph construction.")
     parser.add_argument("--do_normlog", type=bool, default=True, help="Whether to perform preprocessing.")
@@ -70,6 +76,6 @@ if __name__ == "__main__":
     adata = dl.shared_preprocessing(adata, args.do_normlog)
     
     adata = train_model(adata, device)
-    adata = cluster(adata, cluster_method=args.cluster_method, resolution=args.resolution, n_neighbors=args.n_neighbors)
+    adata = cluster(adata, cluster_method=args.cluster_method, k_clusters=args.k_clusters, resolution=args.resolution, n_neighbors=args.n_neighbors)
 
     dl.save_cluster(args.output, adata, "scanit_cluster")
