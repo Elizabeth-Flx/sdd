@@ -218,12 +218,12 @@ def server(input, output, session):
             "bayesspace": [
                 "micromamba", "run", "-n", "t_bayesspace_bass",
                 "Rscript", "tools/t_bayesspace.R",
-                str(r_input_dir), outputs["bayesspace"]
+                str(r_input_dir), outputs["bayesspace"], "True"
             ],
             "bass": [
                 "micromamba", "run", "-n", "t_bayesspace_bass",
                 "Rscript", "tools/t_bass.R",
-                str(r_input_dir), outputs["bass"]
+                str(r_input_dir), outputs["bass"], "True"
             ],
         }
 
