@@ -8,10 +8,15 @@ args <- commandArgs(trailingOnly = TRUE)
 # args[1] : input directory containing rowData.csv, colData.csv, counts.csv.gz
 # args[2] : output file to save clustering results (csv)
 # args[3] : do normlog (TRUE/FALSE)
+# args[4] : k_clusters (optional, default 12)
+# args[5] : pcs for clustering (optional, default 15)
 
-input_dir <- args[1]
+input_dir   <- args[1]
 output_file <- args[2]
-do_normlog <- as.logical(args[3])
+do_normlog  <- as.logical(args[3])
+k_clusters  <- if(length(args) >= 4) as.integer(args[4]) else 12   # default 12
+n_pcs       <- if(length(args) >= 5) as.integer(args[5]) else 15  # default 15
+gamma       <- if(length(args) >= 6) as.numeric(args[6]) else 2  # default 2
 
 
 rowData <- read.csv(paste0(input_dir, "/rowData.csv"), stringsAsFactors=FALSE)
@@ -33,8 +38,8 @@ colData(sce)$row <- colData(sce)$array_row
 colData(sce)$col <- colData(sce)$array_col
 
 set.seed(149)
-sce <- spatialCluster(sce, q=12, platform="ST", d=7,
-                           init.method="mclust", model="t", gamma=2,
+sce <- spatialCluster(sce, q=k_clusters, platform="ST", d=n_pcs,
+                           init.method="mclust", model="t", gamma=gamma,
                            nrep=2000, burn.in=100,
                            save.chain=TRUE)
 
