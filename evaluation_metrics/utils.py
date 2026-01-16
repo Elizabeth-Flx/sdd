@@ -13,29 +13,65 @@ from sklearn.neighbors import NearestNeighbors
 from pathlib import Path
 
 
-# def to load all csvs in one directory to 1D arrays
+# loading csvs and proof of consistency across barcodes
 
-def load_csvs_to_arrays(data_path, files):
+def load_csvs_to_arrays(data_path, files, label_col="spatial_cluster", barcode_col="barcode"):
     dict_all_methods = {}
     groundtruth = None
 
-    for csv_file in files:
+    ref_barcodes = None  # barcode order we will enforce
+    seen = 0
+
+    for csv_file in sorted(files):
         if not csv_file.endswith(".csv"):
             continue
 
         name = os.path.splitext(csv_file)[0]
-        #csv_content = pd.read_csv(os.path.join(data_path, csv_file), header=None).to_numpy().ravel()
-        csv_content = pd.read_csv(os.path.join(data_path, csv_file))["spatial_cluster"].to_numpy()
-        if name.lower() == "groundtruth":
-            groundtruth = csv_content
+        fpath = os.path.join(data_path, csv_file)
+
+        df = pd.read_csv(fpath)
+
+        # basic validation
+        if barcode_col not in df.columns or label_col not in df.columns:
+            raise ValueError(
+                f"{csv_file} must have columns '{barcode_col}' and '{label_col}'. "
+                f"Found: {list(df.columns)}"
+            )
+
+        barcodes = df[barcode_col].astype(str).to_numpy()
+        labels = df[label_col].astype(int).to_numpy()
+
+
+        # check duplicates
+        if len(np.unique(barcodes)) != len(barcodes):
+            dup = pd.Series(barcodes).duplicated()
+            examples = pd.Series(barcodes)[dup].unique()[:10]
+            raise ValueError(f"{csv_file}: duplicated barcodes (e.g. {examples})")
+
+        # enforce identical barcode order
+        if ref_barcodes is None:
+            ref_barcodes = barcodes
         else:
-            dict_all_methods[name] = csv_content
-        print(f"Loaded {name} from {csv_file} (n={len(csv_content)})")
+            if len(barcodes) != len(ref_barcodes):
+                raise ValueError(f"{csv_file}: different number of rows than reference CSV")
 
-    print(f"Total method arrays loaded: {len(dict_all_methods)}")
-    print(dict_all_methods)
-    return dict_all_methods, groundtruth
+            if not np.array_equal(barcodes, ref_barcodes):
+                mismatch = np.where(barcodes != ref_barcodes)[0][0]
+                raise ValueError(
+                    f"{csv_file}: barcode order mismatch at row {mismatch}. "
+                    f"Expected {ref_barcodes[mismatch]} but got {barcodes[mismatch]}."
+                )
 
+        if name.lower() == "groundtruth":
+            groundtruth = labels
+        else:
+            dict_all_methods[name] = labels
+        print(f"Loaded {name} from {csv_file} (n={len(labels)})")
+        seen += 1
+    if seen == 0:
+        raise ValueError(f"No CSV files found in {data_path}")
+
+    return dict_all_methods, groundtruth, ref_barcodes
         
 
 # accuracy metrics helper functions
