@@ -35,7 +35,7 @@ def train_model(adata, device=torch.device('cpu')):
     )
     return adata
 
-def cluster(adata,  louvain_resolution=1.19):
+def cluster(adata, louvain_resolution=1.19):
 
     # Clustering with louvain
     sc.pp.neighbors(adata, use_rep="X_scanit", n_neighbors=15)
@@ -51,6 +51,7 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, required=True, help="Output csv file")    
     
     # parser.add_argument("--n_clusters", type=int, default=19, help="Number of clusters for k-means.")
+    parser.add_argument("--n_clusters", type=int, default=12, help="Number of clusters for clustering.")
     parser.add_argument("--louvain_resolution", type=float, default=1.19, help="Resolution parameter for Louvain clustering.")
     parser.add_argument("--do_normlog", type=bool, default=True, help="Whether to perform preprocessing.")
 
