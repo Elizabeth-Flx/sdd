@@ -1,11 +1,11 @@
-name: sdd-metrics-real
+name: sdd_metrics
 channels:
   - bioconda
   - conda-forge
   - defaults
 dependencies:
   - numpy=1.26
-  - scanpy[version='<1.10']
+  - scanpy=1.9.8
   - pandas
   - leidenalg
   - scipy

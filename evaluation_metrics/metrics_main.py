@@ -12,8 +12,8 @@ import sys
 from scib.metrics import *
 from sklearn.neighbors import NearestNeighbors
 from pathlib import Path
-from utils import *
-from plots import *
+from .utils import *
+from .plots import *
 import argparse
 
 parser = argparse.ArgumentParser(description="Metrics evaluation for clustering methods.")
@@ -25,7 +25,7 @@ parser.add_argument("--output", type=str, required=True, help="Output figures di
 #parser.add_argument("--n_clusters", type=int, default=12, help="Number of clusters for clustering.")
 
 args = parser.parse_args()
-#data_path = "/nfs/home/students/s.reif/SysMed/SysBioSDD/evaluation_metrics/examples/"
+
 anndata_path = args.input_anndata
 csv_path = args.input_csv
 figures_path = args.output
@@ -34,9 +34,9 @@ print('figures_path:', figures_path)
 #dirs = [
 #    d for d in os.listdir(data_path)
 #    if os.path.isdir(os.path.join(data_path, d)) and d != "figures"]
-data_path_dir = os.path.basename(os.path.normpath(csv_path))
-anndata_dir = os.path.basename(os.path.normpath(anndata_path))
-figures_dir = os.path.basename(os.path.normpath(figures_path))
+csv_dir = os.path.abspath(csv_path)
+anndata_dir = os.path.abspath(anndata_path)
+figures_dir = os.path.abspath(figures_path)
 
 # make directory data_path and figures if it doesnt exist yet
 #figures_path = os.path.join(data_path, "figures")
@@ -56,17 +56,17 @@ Silhouette_spat_all = {}
 
     
 
-print(f"Directory found: {data_path_dir}")
+#print(f"Directory found: {data_path_dir}")
 
 #data_path_dir = os.path.join(data_path, figures_dir)
 #dirs_in_dir = os.listdir(data_path_dir)
 
-dict_all_methods, groundtruth = load_csvs_to_arrays(data_path_dir, os.listdir(csv_path))
+dict_all_methods, groundtruth = load_csvs_to_arrays(csv_dir, os.listdir(csv_dir))
 
 # adata as file in path that ends with .h5ad
-for file in os.listdir(anndata_path):
+for file in os.listdir(anndata_dir):
     if file.endswith(".h5ad"):
-        h5ad_file = os.path.join(anndata_path, file)
+        h5ad_file = os.path.join(anndata_dir, file)
         print(f"Loading AnnData from {h5ad_file}")
         adata = sc.read_h5ad(h5ad_file)
         break

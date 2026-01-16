@@ -36,8 +36,7 @@ BASS_obj <- createBASSObject(
   beta_method = "SW"   # or "fix" for large datasets
 )
 
-if 
-BASS_obj <- BASS.preprocess(BASS_obj, doLogNormalize = do_preprocess)
+BASS_obj <- BASS.preprocess(BASS_obj, doLogNormalize = do_normlog)
 BASS_obj <- BASS.run(BASS_obj)
 BASS_obj <- BASS.postprocess(BASS_obj)
 

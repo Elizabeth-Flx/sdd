@@ -26,6 +26,48 @@ except Exception as e:
 def read_visium_h5ad(path: str):
     return sc.read_h5ad(path)
 
+def run_metrics(anndata_dir: Path, csv_dir: Path, metrics_dir: Path) -> dict:
+    project_root = Path(__file__).resolve().parents[1]
+
+    metrics_dir.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        "micromamba", "run", "-n", "sdd_metrics",  
+        "python", "-m", "evaluation_metrics.metrics_main",   
+        "--input_anndata", str(anndata_dir),  
+        "--input_csv", str(csv_dir),            
+        "--output", str(metrics_dir),            
+    ]
+
+    try:
+        p = subprocess.run(
+            cmd,
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return {
+            "ok": True,
+            "cmd": cmd,
+            "returncode": p.returncode,
+            "stdout": (p.stdout or "")[-4000:],
+            "stderr": (p.stderr or "")[-4000:],
+            "output_dir": str(metrics_dir),
+        }
+    except subprocess.CalledProcessError as e:
+        return {
+            "ok": False,
+            "cmd": cmd,
+            "returncode": e.returncode,
+            "stdout": (e.stdout or "")[-4000:],
+            "stderr": (e.stderr or "")[-4000:],
+            "output_dir": str(metrics_dir),
+        }
+    except Exception as e:
+        return {"ok": False, "cmd": cmd, "error": repr(e), "output_dir": str(metrics_dir)}
+
+
 
 # ---------------------------------------------------------------------
 # 2) UI
@@ -54,6 +96,7 @@ app_ui = ui.page_sidebar(
                 "stlearn": "stLearn",
             },
         ),
+        ui.input_checkbox("run_metrics", "Calculate metrics after tools run", value=False),
         ui.input_action_button("run_tools", "Run selected tools"),
         ui.br(),
         ui.output_text_verbatim("tools_status"),
@@ -218,12 +261,12 @@ def server(input, output, session):
             "bayesspace": [
                 "micromamba", "run", "-n", "t_bayesspace_bass",
                 "Rscript", "tools/t_bayesspace.R",
-                str(r_input_dir), outputs["bayesspace"]
+                str(r_input_dir), outputs["bayesspace"], "True"
             ],
             "bass": [
                 "micromamba", "run", "-n", "t_bayesspace_bass",
                 "Rscript", "tools/t_bass.R",
-                str(r_input_dir), outputs["bass"]
+                str(r_input_dir), outputs["bass"], "True"
             ],
         }
 
@@ -294,6 +337,8 @@ def server(input, output, session):
         csv_dir = run_dir / "csv"
         csv_dir.mkdir(parents=True, exist_ok=True)
 
+        metrics_dir = run_dir / "metrics"
+        metrics_dir.mkdir(parents=True, exist_ok=True)
 
         project_root = Path(__file__).resolve().parents[1]
 
@@ -383,6 +428,26 @@ def server(input, output, session):
         else:
             results["_combined_h5ad"] = None
 
+        # -----------------------
+        # Metrics (optional)
+        # -----------------------
+        do_metrics = False
+        try:
+            do_metrics = bool(input.run_metrics())
+        except Exception:
+            do_metrics = False
+
+        if do_metrics:
+            # Wichtig: Dein Metrics-Script erwartet einen ORDNER mit .h5ad -> upload_dir passt
+            results["_metrics"] = run_metrics(
+                anndata_dir=upload_dir,
+                csv_dir=csv_dir,
+                metrics_dir=metrics_dir,
+            )
+        else:
+            results["_metrics"] = {"ok": False, "skipped": True, "reason": "run_metrics unchecked"}
+
+
         tools_result.set(results)
 
 
@@ -429,6 +494,11 @@ def server(input, output, session):
             if r.get("output"):
                 lines.append("\nOUTPUT FILE:")
                 lines.append(str(r["output"]))
+
+            if r.get("output_dir"):
+                lines.append("\nOUTPUT DIR:")
+                lines.append(str(r["output_dir"]))
+
 
             blocks.append("\n".join(lines))
 
@@ -515,7 +585,7 @@ def server(input, output, session):
 
 
     # -----------------------
-    # Main visualization (current adata)
+    # Main visualization 
     # -----------------------
     @output
     @render.ui
