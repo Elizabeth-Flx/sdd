@@ -50,6 +50,15 @@ RUN micromamba create -y -f /tmp/envs/t_scanit_env.yml -n t_scanit
 COPY --chown=mambauser:mambauser envs/t_stlearn_env.yml /tmp/envs/t_stlearn_env.yml
 RUN micromamba create -y -f /tmp/envs/t_stlearn_env.yml -n t_stlearn
 
+# ---- EnSDD Shiny env ----
+#COPY --chown=mambauser:mambauser envs/ensdd_shiny_env.yml /tmp/envs/ensdd_shiny_env.yml
+#RUN micromamba create -y -f /tmp/envs/ensdd_shiny_env.yml -n ensdd_shiny
+
+# ---- Install EnSDD + R deps ----
+#COPY --chown=mambauser:mambauser ensdd/install_ensdd_shiny.R /tmp/install_ensdd_shiny.R
+#USER root
+#RUN micromamba run -n ensdd_shiny R -q -f /tmp/install_ensdd_shiny.R
+#USER mambauser
 
 
 # ---- Ensemble Metrics ----
