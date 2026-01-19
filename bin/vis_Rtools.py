@@ -59,7 +59,7 @@ def plot_cluster_sizes(sizes, out_path, name):
 
 
 def plot_umap_from_obs(adata, out_path, name, cluster_key):
-    out_file = f"{out_path}/umap_{name}.png"
+    out_file: str = f"{out_path}/umap_{name}.png"
     sc.pp.neighbors(adata, use_rep='X')
     sc.tl.umap(adata)  # pyright: ignore[reportCallIssue]
     figs = sc.pl.umap(adata, color=str(cluster_key), show=False, return_fig=True)

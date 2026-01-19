@@ -98,7 +98,3 @@ if __name__ == "__main__":
     # Save ad_map
     output_path = f"{args.output_dir}/sp_atac.h5ad"
     ad_map_ge.write_h5ad(output_path)  # type:ignore
-
-    # Copy sp file to output dir
-    # output_spatial_path = f"{args.output_dir}/c_sp_ad.h5ad"
-    # shutil.copy(f"{args.input_dir}/c_sp_ad.h5ad", output_spatial_path)
