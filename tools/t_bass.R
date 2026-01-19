@@ -49,5 +49,13 @@ BASS_obj <- BASS.postprocess(BASS_obj)
 domains <- BASS_obj@results$z[[1]]   # spatial domain labels
 colData$spatial_cluster <- domains
 
+print(length(unique(domains)))
+
+n_unique <- length(unique(domains))
+# save n_unique to txt file based on args[2] filename 
+n_unique_file <- sub("\\.csv$", "_n_clusters.txt", output_file)
+write(n_unique, file = n_unique_file)
+
+
 colData$barcode <- rownames(colData)
 write.csv(colData[c("barcode", "spatial_cluster")], output_file, row.names = FALSE)
