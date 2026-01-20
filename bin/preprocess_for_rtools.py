@@ -14,7 +14,7 @@ args = parser.parse_args()
 os.makedirs(args.output_dir, exist_ok=True)
 
 # Load your AnnData object
-adata = anndata.read_h5ad(args.input)  # <-- change to your file
+adata = anndata.read_h5ad(args.input) 
 
 
 # Export counts (genes as rows, cells as columns)

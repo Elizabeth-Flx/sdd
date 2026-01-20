@@ -45,4 +45,5 @@ if __name__ == "__main__":
     parser.add_argument("--radius", type=float, default=150, help="Radius for clustering (in micrometers)")
     parser.add_argument("--method", type=str, default="mclust", help="Clustering method (default: mclust)")
     args = parser.parse_args()
+    print("Arguments:", args)
     main(args)
