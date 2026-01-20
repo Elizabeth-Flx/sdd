@@ -210,7 +210,7 @@ def plot_metric_lineplot_datasets_gg(metric_df, metric_name, save_path):
     return p
 
 # mean lineplots of all metrics per datasets
-def plot_means_lineplot(mean_df, save_path, title):
+def plot_means_lineplot(mean_df, title, save_path = None):
     # long format: Method | Metric | Mean_Score
     df_long = mean_df.melt(id_vars=["Method"], var_name="Metric", value_name="Mean_Score")
 
@@ -225,8 +225,9 @@ def plot_means_lineplot(mean_df, save_path, title):
     )
 
     # show + save
-    print(p)
-    p.save(os.path.join(save_path, f"{title}.png"), dpi=300)
+    #print(p)
+    if save_path is not None:
+        p.save(os.path.join(save_path, f"{title}.png"), dpi=300)
 
     return p
     

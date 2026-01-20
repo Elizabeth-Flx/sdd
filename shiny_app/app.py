@@ -2,12 +2,25 @@ from shiny import App, ui, render, reactive
 import pandas as pd
 import scanpy as sc
 import matplotlib.pyplot as plt
+import matplotlib as mpl
+MPL_BASE = mpl.rcParams.copy()
 import numpy as np
 import subprocess
 from pathlib import Path
 import tempfile
 import shutil
 from uuid import uuid4
+import os
+
+import sys
+
+project_root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(project_root))
+
+
+from evaluation_metrics.utils import load_csvs_to_arrays
+from evaluation_metrics.plots import plot_means_lineplot, plot_sankey_diagram
+
 
 # ---------------------------------------------------------------------
 # 1) Preloaded / Demo dataset
@@ -134,6 +147,24 @@ app_ui = ui.page_sidebar(
             ui.output_text_verbatim("bass_plot_info"),
             ui.output_plot("bass_plot"),
         ),
+        ui.card(
+            ui.card_header("Metrics plots"),
+            ui.output_ui("gt_col_ui"),
+            ui.input_select(
+                "metrics_plot_kind",
+                "Plot type:",
+                choices={
+                    "sankey": "Sankey (methods flow)",
+                    "means_all": "Mean metrics (all)",
+                    "means_acc": "Mean metrics (accuracy; needs ground truth metrics in CSV)",
+                    "means_spatial": "Mean metrics (spatial)",
+                    "means_sil": "Mean metrics (silhouette)",
+                },
+                selected="means_all",
+            ),
+            ui.output_ui("metrics_panel_ui"),
+        ),
+
 
 
         width=1 / 2,
@@ -187,7 +218,7 @@ def server(input, output, session):
                 "id": uuid4().hex,
                 "name": info["name"],
                 "src_datapath": src_datapath,
-                "path": src_datapath,  # <-- Shiny temp path, wir kopieren erst beim Run
+                "path": src_datapath,  
             })
 
         if new_entries:
@@ -202,7 +233,7 @@ def server(input, output, session):
             return ui.div("No uploads yet (using demo).")
 
         choices = {u["id"]: f"{u['name']} ({u['id'][:6]})" for u in ups}
-        selected = ups[-1]["id"]  # default: letzter Upload
+        selected = ups[-1]["id"]   
         return ui.input_select("active_upload", "Active dataset:", choices, selected=selected)
 
     @reactive.Calc
@@ -221,6 +252,19 @@ def server(input, output, session):
                 return u["path"]
 
         return ups[-1]["path"]
+
+    @reactive.Calc
+    def adata():
+        res = tools_result.get()
+        combined = res.get("_combined_h5ad") if isinstance(res, dict) else None
+
+        if combined and Path(combined).exists():
+            return sc.read_h5ad(combined)
+
+        path = active_adata_path()
+        if path == DEMO_PATH:
+            return demo_adata
+        return read_visium_h5ad(path)
 
 
   
@@ -438,7 +482,6 @@ def server(input, output, session):
             do_metrics = False
 
         if do_metrics:
-            # Wichtig: Dein Metrics-Script erwartet einen ORDNER mit .h5ad -> upload_dir passt
             results["_metrics"] = run_metrics(
                 anndata_dir=upload_dir,
                 csv_dir=csv_dir,
@@ -504,22 +547,145 @@ def server(input, output, session):
 
         return "\n\n".join(blocks)
 
-    # -----------------------
-    # Data
-    # -----------------------
+
     @reactive.Calc
-    def adata():
+    def current_csv_dir():
         res = tools_result.get()
-        combined = res.get("_combined_h5ad") if isinstance(res, dict) else None
+        run_dir = res.get("_run_dir") if isinstance(res, dict) else None
+        if not run_dir:
+            return None
+        p = Path(run_dir) / "csv"
+        return p if p.exists() else None
 
-        if combined and Path(combined).exists():
-            return sc.read_h5ad(combined)
+    @reactive.Calc
+    def dict_all_methods():
+        cdir = current_csv_dir()
+        if not cdir:
+            return {}
 
-        # fallback
-        path = active_adata_path()
-        if path == DEMO_PATH:
-            return demo_adata
-        return read_visium_h5ad(path)
+        files = [f for f in os.listdir(cdir) if f.endswith(".csv")]
+        if not files:
+            return {}
+
+        dict_all_methods, groundtruth, ref_barcodes = load_csvs_to_arrays(str(cdir), files)
+        return dict_all_methods
+
+
+    @reactive.Calc
+    def df_all_metrics_mean():
+        res = tools_result.get()
+        run_dir = res.get("_run_dir") if isinstance(res, dict) else None
+        if not run_dir:
+            return None
+        p = Path(run_dir) / "metrics" / "all_metrics_summary.csv"
+        if not p.exists():
+            return None
+        return pd.read_csv(p, index_col=0)
+
+    # -----------------------
+    # Ground truth (optional)
+    # -----------------------
+    @output
+    @render.ui
+    def gt_col_ui():
+        a = adata()
+        if a is None:
+            return ui.div("No data.")
+        cols = list(a.obs.columns)
+        choices = {"__none__": "(none)"} | {c: c for c in cols}
+        return ui.input_select("gt_col", "Ground truth column (optional):", choices, selected="__none__")
+
+    def get_groundtruth_or_none(a):
+        try:
+            gt = input.gt_col()
+        except Exception:
+            return None
+        if (not gt) or gt == "__none__":
+            return None
+        if a is None or gt not in a.obs.columns:
+            return None
+        return a.obs[gt].to_numpy()
+
+    # -----------------------
+    # Metrics plots (matplotlib / plotnine)
+    # -----------------------
+    @output
+    @render.plot
+    def metrics_matplotlib_plot():
+        kind = input.metrics_plot_kind()
+
+        if kind == "sankey":
+            return
+
+        with mpl.rc_context(MPL_BASE):
+            df = df_all_metrics_mean()
+            if df is None or df.empty:
+                fig, ax = plt.subplots(figsize=(5, 5))
+                ax.text(
+                    0.5, 0.5,
+                    "No metrics summary found yet.\nRun tools with 'Calculate metrics' enabled.",
+                    ha="center", va="center", transform=ax.transAxes
+                )
+                ax.axis("off")
+                return fig
+
+            df_acc = df[df.columns.intersection(["Method", "ARI", "Purity", "AMI"])]
+            df_spa = df[df.columns.intersection(["Method", "LISI", "PAS"])]
+            df_sil = df[df.columns.intersection(["Method", "Silhouette_exp", "Silhouette_spat"])]
+
+            if kind == "means_acc":
+                p = plot_means_lineplot(df_acc, title="Mean Metric Scores (Accuracy)")
+            elif kind == "means_spatial":
+                p = plot_means_lineplot(df_spa, title="Mean Metric Scores (Spatial)")
+            elif kind == "means_sil":
+                p = plot_means_lineplot(df_sil, title="Mean Metric Scores (Silhouette)")
+            else:
+                p = plot_means_lineplot(df, title="Mean Metric Scores (All)")
+
+            return p.draw()
+
+    # -----------------------
+    # Sankey (Plotly) as inline HTML
+    # -----------------------
+    @output
+    @render.ui
+    def metrics_plotly_ui():
+        if input.metrics_plot_kind() != "sankey":
+            return ui.div()
+
+        methods = dict_all_methods()
+        if not methods:
+            return ui.div("No method CSVs found yet (run tools first).")
+
+        a = adata()
+        gt = get_groundtruth_or_none(a)  # None allowed
+
+        fig = plot_sankey_diagram(
+            methods,
+            ground_truth=gt,
+            title="Sankey" + (" vs Ground Truth" if gt is not None else ""),
+        )
+
+        html = fig.to_html(include_plotlyjs="inline", full_html=False, config={"responsive": True})
+        return ui.HTML(html)
+
+    @output
+    @render.ui
+    def metrics_panel_ui():
+        kind = input.metrics_plot_kind()
+
+        if kind == "sankey":
+            return ui.card(
+                ui.card_header("Sankey"),
+                ui.output_ui("metrics_plotly_ui"),
+            )
+
+        return ui.card(
+            ui.card_header("Metrics"),
+            ui.output_plot("metrics_matplotlib_plot"),
+        )
+
+
 
 
     @output
@@ -543,6 +709,7 @@ def server(input, output, session):
         )
 
     def plot_spatial_clusters(a, col: str, title: str):
+        mpl.rcParams.update(MPL_BASE)
         if a is None or "spatial" not in a.obsm:
             return None
 
@@ -630,6 +797,7 @@ def server(input, output, session):
     @output
     @render.plot
     def visium_plot():
+        mpl.rcParams.update(MPL_BASE)
         a = adata()
         if a is None or "spatial" not in a.obsm.keys():
             return
@@ -798,11 +966,6 @@ def server(input, output, session):
         fig = plot_spatial_clusters(a, "bass", "BASS clusters")
         if fig is not None:
             return fig
-
-
-
-
-
 
 
 app = App(app_ui, server)
