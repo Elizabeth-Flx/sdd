@@ -9,7 +9,9 @@ def preprocessing(adata):
     adata.obs["imagerow"] = adata.obsm["spatial"][:, 1]
     adata.obs["imagecol"] = adata.obsm["spatial"][:, 0]
 
-    adata.obsm["X_morphology"] = adata.obsm["features"]
+    # only add if not already present
+    if "X_morphology" not in adata.obsm:
+        adata.obsm["X_morphology"] = adata.obsm["features"]
 
     st.em.run_pca(adata, n_comps=50)
 
