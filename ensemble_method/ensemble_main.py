@@ -6,17 +6,17 @@ from scipy.spatial.distance import squareform
 
 import networkx as nx
 import community as community_louvain
-from ensemble_helper import *
+from .ensemble_helper import *
 import os
 import argparse
 
 parser = argparse.ArgumentParser(description="Generating ensemble domain detection clusters.")
 
 parser.add_argument("--input_csvs", type=str, required=True, help="Input tool csv files directory")
-parser.add_argument('--cluster_k', type=int, required=False, default=12, help='Number of clusters for final clustering (default: 12)')
+parser.add_argument('--k_clusters', type=int, required=False, default=12, help='Number of clusters for final clustering (default: 12)')
 args = parser.parse_args()
 data_path_dir = args.input_csvs
-K = args.cluster_k
+K = args.k_clusters
 print('Input csv files directory:', data_path_dir)
 
 # for all csvs in dir: read in each csv (only one column per csv) to dataframe to use

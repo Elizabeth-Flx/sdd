@@ -22,6 +22,8 @@ from evaluation_metrics.utils import load_csvs_to_arrays
 from evaluation_metrics.plots import plot_means_lineplot, plot_sankey_diagram
 
 
+
+
 # ---------------------------------------------------------------------
 # 1) Preloaded / Demo dataset
 # ---------------------------------------------------------------------
@@ -125,6 +127,7 @@ app_ui = ui.page_sidebar(
                 "graphst": "GraphST",
                 "scanit": "SCAN-IT",
                 "stlearn": "stLearn",
+                "ensemble": "Ensemble Method",
             },
         ),
         ui.input_checkbox("run_metrics", "Calculate metrics after tools run", value=False),
@@ -164,6 +167,11 @@ app_ui = ui.page_sidebar(
             ui.card_header("BASS result"),
             ui.output_text_verbatim("bass_plot_info"),
             ui.output_plot("bass_plot"),
+        ),
+        ui.card(
+            ui.card_header("Ensemble result"),
+            ui.output_text_verbatim("ensemble_plot_info"),
+            ui.output_plot("ensemble_plot"),
         ),
         ui.card(
             ui.card_header("Metrics plots"),
@@ -327,6 +335,7 @@ def server(input, output, session):
             "stlearn": str((csv_dir / "stlearn.csv").resolve()),
             "bayesspace": str((csv_dir / "bayesspace.csv").resolve()),
             "bass": str((csv_dir / "bass.csv").resolve()),
+            "ensemble": str((csv_dir / "ensemble.csv").resolve()),
         }
 
         cmds = {
@@ -358,11 +367,16 @@ def server(input, output, session):
                 "Rscript", "tools/t_bayesspace.R",
                 str(r_input_dir), outputs["bayesspace"], "True"
             ],
+            "ensemble": [
+                "micromamba", "run", "-n", "sdd_metrics",   
+                "python", "-m", "ensemble_method.ensemble_main",
+                "--input_csvs", str(csv_dir),
+            ],
         }
 
         cmd = cmds[tool_key]
 
-        if n_clusters is not None and tool_key in ("scanit", "graphst", "stlearn"):
+        if n_clusters is not None and tool_key in ("scanit", "graphst", "stlearn", "ensemble"):
             cmd += ["--k_clusters", str(n_clusters)]
 
         if tool_key == "bayesspace" and n_clusters is not None:
@@ -524,7 +538,7 @@ def server(input, output, session):
 
         # 2) Run other selected tools with n_clusters if available
         for tool_key in selected:
-            if tool_key == "bass":
+            if tool_key in ("bass", "ensemble"):
                 continue
 
             if tool_key not in ("scanit", "graphst", "stlearn", "bayesspace"):
@@ -532,6 +546,9 @@ def server(input, output, session):
                 continue
 
             results[tool_key] = run_tool(tool_key, adata_path, csv_dir, r_input_dir, n_clusters=n_clusters)
+
+        if "ensemble" in selected:
+            results["ensemble"] = run_tool("ensemble", adata_path, csv_dir, r_input_dir, n_clusters=n_clusters)
 
 
         combined_path = run_dir / "combined.h5ad"
@@ -1063,6 +1080,31 @@ def server(input, output, session):
         fig = plot_spatial_clusters(a, "bass", "BASS clusters")
         if fig is not None:
             return fig
+
+    # -----------------------
+    # Ensemble result plotting
+    # -----------------------
+    @output
+    @render.text
+    def ensemble_plot_info():
+        a = adata()
+        if a is None:
+            return "No data loaded."
+        if "spatial" not in a.obsm:
+            return "No spatial coordinates."
+        if "ensemble" not in a.obs.columns:
+            return "No Ensemble result yet (obs['ensemble'] missing). Run Ensemble first."
+        return "Showing Ensemble clusters (obs['ensemble'])."
+
+
+    @output
+    @render.plot
+    def ensemble_plot():
+        a = adata()
+        fig = plot_spatial_clusters(a, "ensemble", "Ensemble clusters")
+        if fig is not None:
+            return fig
+
 
 
 app = App(app_ui, server)
