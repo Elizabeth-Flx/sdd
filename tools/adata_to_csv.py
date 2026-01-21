@@ -21,7 +21,10 @@ def create_csvs(adata_path, csv_dir="../files/csv/"):
         )
         
     rowData = adata.var.copy()
-    rowData.insert(0, "gene_id", rowData.index)
+    
+    if "gene_id" not in rowData.columns:
+        rowData.insert(0, "gene_id", rowData.index)
+    # rowData.insert(0, "gene_id", rowData.index)
 
     colData = adata.obs.copy()
 
