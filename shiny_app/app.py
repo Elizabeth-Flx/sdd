@@ -80,6 +80,18 @@ def run_metrics(anndata_dir: Path, csv_dir: Path, metrics_dir: Path) -> dict:
     except Exception as e:
         return {"ok": False, "cmd": cmd, "error": repr(e), "output_dir": str(metrics_dir)}
 
+def read_bass_n_clusters(csv_dir: Path) -> int | None:
+    p = csv_dir / "bass_n_clusters.txt"
+    if not p.exists():
+        return None
+    try:
+        txt = p.read_text().strip()
+        digits = "".join([c for c in txt if c.isdigit()])
+        return int(digits) if digits else None
+    except Exception:
+        return None
+
+
 
 
 # ---------------------------------------------------------------------
@@ -269,7 +281,7 @@ def server(input, output, session):
 
   
 
-    def run_tool(tool_key: str, adata_path: str, csv_dir: Path, r_input_dir: Path | None) -> dict:
+    def run_tool(tool_key: str, adata_path: str, csv_dir: Path, r_input_dir: Path | None, n_clusters: int | None) -> dict:
         project_root = Path(__file__).resolve().parents[1]
 
         if tool_key in ("bayesspace", "bass") and r_input_dir is None:
@@ -284,11 +296,16 @@ def server(input, output, session):
         }
 
         cmds = {
+            "bass": [
+                "micromamba", "run", "-n", "t_bayesspace_bass",
+                "Rscript", "tools/t_bass.R",
+                str(r_input_dir), outputs["bass"], "True"
+            ],
             "scanit": [
                 "micromamba", "run", "-n", "t_scanit",
                 "python", "-m", "tools.t_scanit",
                 "--input", adata_path,
-                "--output", outputs["scanit"],
+                "--output", outputs["scanit"]
             ],
             "graphst": [
                 "micromamba", "run", "-n", "t_graphst",
@@ -307,14 +324,16 @@ def server(input, output, session):
                 "Rscript", "tools/t_bayesspace.R",
                 str(r_input_dir), outputs["bayesspace"], "True"
             ],
-            "bass": [
-                "micromamba", "run", "-n", "t_bayesspace_bass",
-                "Rscript", "tools/t_bass.R",
-                str(r_input_dir), outputs["bass"], "True"
-            ],
         }
 
         cmd = cmds[tool_key]
+
+        if n_clusters is not None and tool_key in ("scanit", "graphst", "stlearn"):
+            cmd += ["--k_clusters", str(n_clusters)]
+
+        if tool_key == "bayesspace" and n_clusters is not None:
+            cmd += [str(n_clusters)]
+
 
         try:
             p = subprocess.run(
@@ -363,6 +382,8 @@ def server(input, output, session):
     @reactive.event(input.run_tools)
     def _run_selected_tools():
         a = adata()
+        n_clusters = None
+
         if a is None:
             tools_result.set({"error": {"ok": False, "error": "No dataset loaded."}})
             return
@@ -435,11 +456,28 @@ def server(input, output, session):
                 tools_result.set(results)
                 return
 
+        # 1) Run Bass first to get n_clusters if Bass is selected
+        if "bass" in selected:
+            results["bass"] = run_tool("bass", adata_path, csv_dir, r_input_dir, n_clusters=None)
+
+            n_clusters = read_bass_n_clusters(csv_dir)
+            results["_bass_n_clusters"] = {
+                "ok": n_clusters is not None,
+                "value": n_clusters,
+                "path": str((csv_dir / "bass_n_clusters.txt").resolve()),
+            }
+
+        # 2) Run other selected tools with n_clusters if available
         for tool_key in selected:
-            if tool_key not in ("scanit", "graphst", "stlearn", "bayesspace", "bass"):
+            if tool_key == "bass":
+                continue
+
+            if tool_key not in ("scanit", "graphst", "stlearn", "bayesspace"):
                 results[tool_key] = {"ok": False, "error": "Tool not wired up yet."}
                 continue
-            results[tool_key] = run_tool(tool_key, adata_path, csv_dir, r_input_dir)
+
+            results[tool_key] = run_tool(tool_key, adata_path, csv_dir, r_input_dir, n_clusters=n_clusters)
+
 
         combined_path = run_dir / "combined.h5ad"
 

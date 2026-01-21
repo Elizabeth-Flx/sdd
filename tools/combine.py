@@ -30,9 +30,10 @@ if __name__ == "__main__":
         cluster_files = os.listdir(args.csv_dir)
         
         for file in cluster_files:
-            print("Combining " + file)
-            cluster_name = file.split(".csv")[0]
-            adata = add_cluster(adata, args.csv_dir + "/" + file, cluster_name)
+            if file.endswith(".csv"):
+                print("Combining " + file)
+                cluster_name = file.split(".csv")[0]
+                adata = add_cluster(adata, args.csv_dir + "/" + file, cluster_name)
     else:
         for cluster_name in args.clusters_names:
             print("Combining " + cluster_name)
