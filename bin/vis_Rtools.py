@@ -179,6 +179,8 @@ def main():
 
     if "atac" in args.h5ad.lower():
         name = "atac"
+    elif "rna" in args.h5ad.lower():
+        name = "rna_atac"
     else:
         name = "sp"
 

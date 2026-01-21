@@ -176,27 +176,32 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     # Use tool name in filenames
-    atac_file = os.path.join(args.input_dir, f"sp_atac_{args.tool_name}.h5ad")
-    sp_file = os.path.join(args.input_dir, f"sp_{args.tool_name}.h5ad")
+    # atac_file = os.path.join(args.input_dir, f"sp_atac_{args.tool_name}.h5ad")
+    # sp_file = os.path.join(args.input_dir, f"sp_{args.tool_name}.h5ad")
+    rna_atac_file = os.path.join(args.input_dir, f"sp_integrated_rna.h5ad")
 
-    ad_atac = sc.read_h5ad(atac_file)
-    ad_sp = sc.read_h5ad(sp_file)
+    # ad_atac = sc.read_h5ad(atac_file)
+    # ad_sp = sc.read_h5ad(sp_file)
+    ad_rna_atac = sc.read_h5ad(rna_atac_file)
 
-    y_atac = get_cluster_labels(ad_atac, args.clusterkey)
-    y_sp = get_cluster_labels(ad_sp, args.clusterkey)
+    # y_atac = get_cluster_labels(ad_atac, args.clusterkey)
+    # y_sp = get_cluster_labels(ad_sp, args.clusterkey)
+    y_rna_atac = get_cluster_labels(ad_rna_atac, args.clusterkey)
     
     # UMAP plots
-    plot_umap_from_obs(ad_atac, args.output_dir, "atac", args.clusterkey)
-    plot_umap_from_obs(ad_sp, args.output_dir, "sp", args.clusterkey)
+    # plot_umap_from_obs(ad_atac, args.output_dir, "atac", args.clusterkey)
+    # plot_umap_from_obs(ad_sp, args.output_dir, "sp", args.clusterkey)
+    plot_umap_from_obs(ad_rna_atac, args.output_dir, "rna_atac", args.clusterkey)
 
     # Spatial plots
-    plot_spatial(ad_atac, y_atac, args.output_dir, "atac")
-    plot_spatial(ad_sp, y_sp, args.output_dir, "sp")
+    # plot_spatial(ad_atac, y_atac, args.output_dir, "atac")
+    # plot_spatial(ad_sp, y_sp, args.output_dir, "sp")
+    plot_spatial(ad_rna_atac, y_rna_atac, args.output_dir, "rna_atac")
 
     # Cell-gene heatmaps (top 50 genes)
-    plot_cell_gene_heatmap(ad_atac, y_atac, out_path=args.output_dir, name="atac", cluster_rows=False, cluster_cols=True, max_genes=50)
-    plot_cell_gene_heatmap(ad_sp, y_sp, out_path=args.output_dir, name="sp", cluster_rows=False, cluster_cols=True, max_genes=50)
-
+    # plot_cell_gene_heatmap(ad_atac, y_atac, out_path=args.output_dir, name="atac", cluster_rows=False, cluster_cols=True, max_genes=50)
+    # plot_cell_gene_heatmap(ad_sp, y_sp, out_path=args.output_dir, name="sp", cluster_rows=False, cluster_cols=True, max_genes=50)
+    plot_cell_gene_heatmap(ad_rna_atac, y_rna_atac, out_path=args.output_dir, name="rna_atac", cluster_rows=False, cluster_cols=True, max_genes=50)
 
 if __name__ == "__main__":
     main()

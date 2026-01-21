@@ -1,16 +1,20 @@
 library(Seurat)
 
-# --- Updated workflow: Load counts CSVs, create Seurat objects, and output combined gene expression matrix ---
+# Get inputs and out dir via command line arguments
+args <- commandArgs(trailingOnly = TRUE)
+
+rna_counts_file <- args[1]
+atac_counts_file <- args[2]
+output_file <- args[3]
 
 # Load counts from CSV
-rna_counts <- read.csv("data/tangram_output/sp_rna_counts.csv", row.names = 1)
-atac_counts <- read.csv("data/tangram_output/sp_atac_counts.csv", row.names = 1)
+rna_counts <- read.csv(rna_counts_file, row.names = 1)
+atac_counts <- read.csv(atac_counts_file, row.names = 1)
 
 # Ensure common genes
 common_genes <- intersect(colnames(rna_counts), colnames(atac_counts))
 rna_counts <- rna_counts[, common_genes]
 atac_counts <- atac_counts[, common_genes]
-
 
 # Create Seurat objects for each modality
 rna <- CreateSeuratObject(counts = t(rna_counts), assay = "RNA")
@@ -32,10 +36,5 @@ integrated <- IntegrateData(anchorset = anchors)
 DefaultAssay(integrated) <- "integrated"
 integrated_matrix <- as.matrix(GetAssayData(integrated, slot = "data"))
 
-# Subset to RNA cells (original RNA cell names)
-# rna_cell_names <- colnames(rna)
-# common_cells <- intersect(colnames(integrated_matrix), rna_cell_names)
-# integrated_matrix_rna <- integrated_matrix[, common_cells, drop = FALSE]
-
 # Save the integrated matrix for downstream tools
-write.csv(t(integrated_matrix), file = "data/integrated_rna_matrix.csv")
+write.csv(t(integrated_matrix), file = output_file)
