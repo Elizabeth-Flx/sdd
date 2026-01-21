@@ -106,6 +106,12 @@ app_ui = ui.page_sidebar(
             multiple=True,
             accept=[".h5ad"],
         ),
+        ui.input_file(
+            "file_atac",
+            "Upload an ATAC dataset (.h5ad)",
+            multiple=True,
+            accept=[".h5ad"],
+        ),
         ui.output_ui("dataset_picker_ui"),
         ui.br(),
         ui.output_text_verbatim("info"),
@@ -211,6 +217,8 @@ def server(input, output, session):
 
     uploads_state = reactive.Value([])
 
+    atac_uploads_state = reactive.Value([])
+
     @reactive.Effect
     def _track_uploads():
         file_list = input.file() or []
@@ -235,6 +243,32 @@ def server(input, output, session):
 
         if new_entries:
             uploads_state.set(current + new_entries)
+    
+    @reactive.Effect
+    def _track_atac_uploads():
+        file_list = input.file_atac() or []
+        if not file_list:
+            return
+
+        current = atac_uploads_state.get()
+        seen_srcs = {u["src_datapath"] for u in current}
+
+        new_entries = []
+        for info in file_list:
+            src_datapath = info["datapath"]
+            if src_datapath in seen_srcs:
+                continue
+
+            new_entries.append({
+                "id": uuid4().hex,
+                "name": info["name"],
+                "src_datapath": src_datapath,
+                "path": src_datapath,
+            })
+
+        if new_entries:
+            atac_uploads_state.set(current + new_entries)
+
 
 
     @output
@@ -396,8 +430,14 @@ def server(input, output, session):
 
         run_id = f"run-{uuid4().hex}"
         run_dir = session_dir / run_id
-        upload_dir = run_dir / "upload"
-        upload_dir.mkdir(parents=True, exist_ok=True)
+
+        results = {"_run_dir": str(run_dir)}
+
+        upload_visium_dir = run_dir / "upload_visium"
+        upload_visium_dir.mkdir(parents=True, exist_ok=True)
+
+        upload_atac_dir = run_dir / "upload_atac"
+        upload_atac_dir.mkdir(parents=True, exist_ok=True)
         
         csv_dir = run_dir / "csv"
         csv_dir.mkdir(parents=True, exist_ok=True)
@@ -415,13 +455,28 @@ def server(input, output, session):
         else:
             src = src.resolve()
 
-        dst = upload_dir / src.name
+        dst = upload_visium_dir / src.name
         shutil.copy2(src, dst)
         adata_path = str(dst)
 
+        # --- copy ATAC upload (optional) into upload_atac_dir ---
+        atac_path = None
+        atac_ups = atac_uploads_state.get()
+
+        if atac_ups:
+            atac_src_path = atac_ups[-1]["path"]
+            atac_src = Path(atac_src_path).resolve()
+
+            atac_dst = upload_atac_dir / atac_src.name
+            shutil.copy2(atac_src, atac_dst)
+            atac_path = str(atac_dst)
+
+        # helpful for debugging / downstream use
+        results["_upload_visium_dir"] = str(upload_visium_dir)
+        results["_upload_atac_dir"] = str(upload_atac_dir)
+        results["_atac_h5ad"] = atac_path
 
 
-        results = {"_run_dir": str(run_dir)}
 
         needs_r_input = any(t in ("bayesspace", "bass") for t in selected)
         r_input_dir = None
@@ -521,7 +576,7 @@ def server(input, output, session):
 
         if do_metrics:
             results["_metrics"] = run_metrics(
-                anndata_dir=upload_dir,
+                anndata_dir=upload_visium_dir,
                 csv_dir=csv_dir,
                 metrics_dir=metrics_dir,
             )
@@ -549,9 +604,13 @@ def server(input, output, session):
             if tool_name in ("_run_dir", "_combined_h5ad"):
                 continue
 
+            if not isinstance(r, dict):
+                blocks.append(f"=== {tool_name.upper()} ===\n{r}")
+                continue
 
             lines = [f"=== {tool_name.upper()} ==="]
             lines.append("[OK]" if r.get("ok") else "[FAIL]")
+
 
             if r.get("cmd"):
                 lines.append("\nCMD:")
