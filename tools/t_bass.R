@@ -11,7 +11,7 @@ args <- commandArgs(trailingOnly = TRUE)
 
 input_dir   <- args[1]
 output_file <- args[2]
-do_normlog  <- as.logical(args[3])  
+do_normlog  <- if(length(args) >= 3) as.logical(args[3]) else TRUE
 k_clusters  <- if(length(args) >= 4) as.integer(args[4]) else 12   # default 12
 n_topics    <- if(length(args) >= 5) as.integer(args[5]) else 15  # default 15
 
@@ -47,6 +47,14 @@ BASS_obj <- BASS.postprocess(BASS_obj)
 
 domains <- BASS_obj@results$z[[1]]   # spatial domain labels
 colData$spatial_cluster <- domains
+
+print(length(unique(domains)))
+
+n_unique <- length(unique(domains))
+# save n_unique to txt file based on args[2] filename 
+n_unique_file <- sub("\\.csv$", "_n_clusters.txt", output_file)
+write(n_unique, file = n_unique_file)
+
 
 colData$barcode <- rownames(colData)
 write.csv(colData[c("barcode", "spatial_cluster")], output_file, row.names = FALSE)
