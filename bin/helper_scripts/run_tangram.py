@@ -5,8 +5,6 @@ import pandas as pd
 import tangram as tg
 import argparse as ap
 import matplotlib.pyplot as plt
-import os
-import shutil
 
 NUM_EPOCHS = 500
 DEVICE = "cpu"

@@ -1,0 +1,27 @@
+name: sdd_metrics
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - numpy=1.26
+  - scanpy=1.9.8
+  - pandas
+  - leidenalg
+  - scipy
+  - umap-learn
+  - matplotlib
+  - h5py
+  - seaborn
+  - anndata
+  - scikit-learn
+  - python-igraph
+  - plotly
+  - pynndescent
+  - python=3.10
+  - igraph
+  - pytables
+  - plotnine
+  - scib
+  - ipykernel
+  - python-louvain

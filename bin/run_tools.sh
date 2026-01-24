@@ -11,7 +11,7 @@ VIS_ENV="$5"
 TOOLS_OUT_DIR="$DATA_DIR/tools"
 TOOL_NAMES=("graphst") #"graphst" "scanit" 
 
-matrix_all="$DATA_DIR/sp_integrated_all.h5ad"
+# matrix_all="$DATA_DIR/sp_integrated_all.h5ad"
 matrix_rna="$DATA_DIR/sp_integrated_rna.h5ad"
 
 # Run all tools for both datasets
@@ -34,7 +34,7 @@ for tool in "${TOOL_NAMES[@]}"; do
             ;;
     esac
     # Run the tool
-    python3 "bin/t_${tool}.py" --input_h5ad "$matrix_all" --output_h5ad "$TOOLS_OUT_DIR/${tool}/sp_integrated_all.h5ad"
+    # python3 "bin/t_${tool}.py" --input_h5ad "$matrix_all" --output_h5ad "$TOOLS_OUT_DIR/${tool}/sp_integrated_all.h5ad"
     python3 "bin/t_${tool}.py" --input_h5ad "$matrix_rna" --output_h5ad "$TOOLS_OUT_DIR/${tool}/sp_integrated_rna.h5ad"
     # Deactivate the environment
     conda deactivate
