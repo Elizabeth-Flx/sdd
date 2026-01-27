@@ -12,8 +12,8 @@ import sys
 from scib.metrics import *
 from sklearn.neighbors import NearestNeighbors
 from pathlib import Path
-from utils import *
-from plots import *
+from .utils import *
+from .plots import *
 import argparse
 
 parser = argparse.ArgumentParser(description="Metrics evaluation for clustering methods.")
