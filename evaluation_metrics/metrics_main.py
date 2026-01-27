@@ -12,8 +12,8 @@ import sys
 from scib.metrics import *
 from sklearn.neighbors import NearestNeighbors
 from pathlib import Path
-from .utils import *
-from .plots import *
+from utils import *
+from plots import *
 import argparse
 
 parser = argparse.ArgumentParser(description="Metrics evaluation for clustering methods.")
@@ -145,3 +145,19 @@ df_all_metrics, df_all_metrics_mean = generate_metrics_df_from_dicts(metric_dict
 
 df_all_metrics.to_csv(os.path.join(figures_dir, "all_metrics_detailed.csv"))
 df_all_metrics_mean.to_csv(os.path.join(figures_dir, "all_metrics_summary.csv"))
+
+print(df_all_metrics_mean)
+df_metrics_accuracy = df_all_metrics_mean[df_all_metrics_mean.columns.intersection(['Method', 'ARI', 'Purity', 'AMI'])]
+print(df_metrics_accuracy)
+df_metrics_spatial = df_all_metrics_mean[df_all_metrics_mean.columns.intersection(['Method', 'LISI', 'PAS'])]
+print(df_metrics_spatial)
+df_metrics_silhouette = df_all_metrics_mean[df_all_metrics_mean.columns.intersection(['Method', 'Silhouette_exp', 'Silhouette_spat'])]
+boxplot_p = plot_metric_boxplots_gg(df_all_metrics, 'ARI', figures_dir)
+lineplot_p = plot_metric_lineplot_datasets_gg(df_all_metrics, 'ARI', figures_dir)
+
+mean_plots = plot_means_lineplot(df_all_metrics_mean, title="Mean Metric Scores Method", save_path=figures_dir)
+mean_plots_accuracy = plot_means_lineplot(df_metrics_accuracy, title="Mean Metric Scores Accuracy", save_path=figures_dir)
+mean_plots_spatial = plot_means_lineplot(df_metrics_spatial, title="Mean Metric Scores Spatial", save_path=figures_dir)
+mean_plots_silhouette = plot_means_lineplot(df_metrics_silhouette, title="Mean Metric Scores Silhouette", save_path=figures_dir)
+
+print(f"Plots generated and saved for directory {figures_dir}")
