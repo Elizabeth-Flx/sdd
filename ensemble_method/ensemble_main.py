@@ -91,18 +91,18 @@ H, w = ensdd_weighted_consensus(method_spot_mats, niter=100, epsilon=1e-5)
 print("Consensus matrix H shape: ", H.shape)
 print('finished computing consensus matrix\n')
 print("Method weights: ", w)
-H_csr = dense_similarity_to_csr_knn(H, k=50, tau=0.1, keep_diagonal=False, make_symmetric=True, dtype=np.float32)
-print('finished building consensus kNN graph\n')
+#H_csr = dense_similarity_to_csr_knn(H, k=50, tau=0.1, keep_diagonal=False, make_symmetric=True, dtype=np.float32)
+#print('finished building consensus kNN graph\n')
 #labels, info = leiden_final(H_csr, K=K, seed=0, partition_type="rb")
 #print('finished Leiden clustering with \n')
 #print("Leiden info: ", info)
 
-labels, info = leiden_overcluster_then_merge(A_csr=H_csr, H=H, K=K, seed=0, partition_type="rb", r_start=0.1,)
-print('finished Leiden clustering with \n')
+#labels, info = leiden_overcluster_then_merge(A_csr=H_csr, H=H, K=K, seed=0, partition_type="rb", r_start=0.1,)
+#print('finished Leiden clustering with \n')
 #print("Leiden info: ", info)
 
-#labels = hc_from_consensus(H, K=K, linkage_method="average")
-#print('finished Hierarchical Clustering to get final labels\n')
+labels = hc_from_consensus(H, K=K, linkage_method="average")
+print('finished Hierarchical Clustering to get final labels\n')
 
 
 # to output dataframe format
