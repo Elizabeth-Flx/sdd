@@ -22,8 +22,11 @@ dependencies:
   - tqdm=4.67.1
   - umap-learn=0.5.9.post2
   - yaml=0.2.5
+  - plotnine=0.15.2
+  - plotly=6.5.2
   - pip:
       - shiny==1.5.0
       - shinychat==0.2.8
       - uvicorn==0.38.0
       - websockets==15.0.1
+      - scib==1.1.7
