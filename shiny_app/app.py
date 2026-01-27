@@ -93,6 +93,48 @@ def read_bass_n_clusters(csv_dir: Path) -> int | None:
     except Exception:
         return None
 
+def run_multiomics_integration(rna_h5ad: str, atac_h5ad: str, tmp_dir: Path, out_h5ad: Path) -> dict:
+    project_root = Path(__file__).resolve().parents[1]
+
+    cmd = [
+        "bash", "multiomics/run_multiomics_integration.sh",
+        rna_h5ad,
+        atac_h5ad,
+        "shiny",
+        "seurat_env",
+        str(tmp_dir),
+        str(out_h5ad),
+    ]
+
+    try:
+        p = subprocess.run(
+            cmd,
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        ok = out_h5ad.exists()
+        return {
+            "ok": ok,
+            "cmd": cmd,
+            "returncode": p.returncode,
+            "stdout": (p.stdout or "")[-4000:],
+            "stderr": (p.stderr or "")[-4000:],
+            "output_h5ad": str(out_h5ad) if ok else None,
+        }
+    except subprocess.CalledProcessError as e:
+        return {
+            "ok": False,
+            "cmd": cmd,
+            "returncode": e.returncode,
+            "stdout": (e.stdout or "")[-4000:],
+            "stderr": (e.stderr or "")[-4000:],
+            "output_h5ad": None,
+        }
+    except Exception as e:
+        return {"ok": False, "cmd": cmd, "error": repr(e), "output_h5ad": None}
+
 
 
 
@@ -102,18 +144,11 @@ def read_bass_n_clusters(csv_dir: Path) -> int | None:
 app_ui = ui.page_sidebar(
     ui.sidebar(
         ui.h4("1. Data input"),
-        ui.input_file(
-            "file",
-            "Upload a spatial dataset (.h5ad)",
-            multiple=True,
-            accept=[".h5ad"],
-        ),
-        ui.input_file(
-            "file_atac",
-            "Upload an ATAC dataset (.h5ad)",
-            multiple=True,
-            accept=[".h5ad"],
-        ),
+        ui.output_ui("visium_upload_ui"),
+
+        ui.input_checkbox("do_multiomics", "Enable multi-omics (RNA_Assay + ATAC)", value=False),
+        ui.output_ui("multiomics_upload_ui"),
+
         ui.output_ui("dataset_picker_ui"),
         ui.br(),
         ui.output_text_verbatim("info"),
@@ -225,7 +260,8 @@ def server(input, output, session):
 
     uploads_state = reactive.Value([])
 
-    atac_uploads_state = reactive.Value([])
+    rna_assay_state = reactive.Value(None)
+    atac_state = reactive.Value(None)
 
     @reactive.Effect
     def _track_uploads():
@@ -253,29 +289,41 @@ def server(input, output, session):
             uploads_state.set(current + new_entries)
     
     @reactive.Effect
-    def _track_atac_uploads():
+    def _track_rna_assay_upload():
+        try:
+            if not bool(input.do_multiomics()):
+                return
+        except Exception:
+            return
+
+        file_list = input.file_rna_assay() or []
+        if not file_list:
+            return
+
+        info = file_list[0]
+        rna_assay_state.set({
+            "name": info["name"],
+            "path": info["datapath"],
+        })
+
+    @reactive.Effect
+    def _track_atac_upload():
+        try:
+            if not bool(input.do_multiomics()):
+                return
+        except Exception:
+            return
+
         file_list = input.file_atac() or []
         if not file_list:
             return
 
-        current = atac_uploads_state.get()
-        seen_srcs = {u["src_datapath"] for u in current}
+        info = file_list[0]
+        atac_state.set({
+            "name": info["name"],
+            "path": info["datapath"],
+        })
 
-        new_entries = []
-        for info in file_list:
-            src_datapath = info["datapath"]
-            if src_datapath in seen_srcs:
-                continue
-
-            new_entries.append({
-                "id": uuid4().hex,
-                "name": info["name"],
-                "src_datapath": src_datapath,
-                "path": src_datapath,
-            })
-
-        if new_entries:
-            atac_uploads_state.set(current + new_entries)
 
 
 
@@ -289,6 +337,51 @@ def server(input, output, session):
         choices = {u["id"]: f"{u['name']} ({u['id'][:6]})" for u in ups}
         selected = ups[-1]["id"]   
         return ui.input_select("active_upload", "Active dataset:", choices, selected=selected)
+
+
+    @output
+    @render.ui
+    def multiomics_upload_ui():
+        try:
+            enabled = bool(input.do_multiomics())
+        except Exception:
+            enabled = False
+
+        if not enabled:
+            return ui.div()  
+
+        return ui.TagList(
+            ui.input_file(
+                "file_rna_assay",
+                "Upload RNA_Assay (.h5ad)",
+                multiple=False,
+                accept=[".h5ad"],
+            ),
+            ui.input_file(
+                "file_atac",
+                "Upload ATAC (.h5ad)",
+                multiple=False,
+                accept=[".h5ad"],
+            ),
+        )
+
+    @output
+    @render.ui
+    def visium_upload_ui():
+        try:
+            if bool(input.do_multiomics()):
+                return ui.div()  # im Multiomics-Modus verstecken
+        except Exception:
+            pass
+
+        return ui.input_file(
+            "file",
+            "Upload a spatial dataset (.h5ad)",
+            multiple=True,
+            accept=[".h5ad"],
+        )
+
+
 
     @reactive.Calc
     def active_adata_path():
@@ -310,11 +403,18 @@ def server(input, output, session):
     @reactive.Calc
     def adata():
         res = tools_result.get()
-        combined = res.get("_combined_h5ad") if isinstance(res, dict) else None
 
+        # 1) If a combined file exists, this is the best option
+        combined = res.get("_combined_h5ad") if isinstance(res, dict) else None
         if combined and Path(combined).exists():
             return sc.read_h5ad(combined)
+        
+        # 2) If multiomics integration was done, use that
+        integrated = res.get("_integrated_h5ad") if isinstance(res, dict) else None
+        if integrated and Path(integrated).exists():
+            return sc.read_h5ad(integrated)
 
+        # 3) Fallback to active upload or demo
         path = active_adata_path()
         if path == DEMO_PATH:
             return demo_adata
@@ -473,22 +573,92 @@ def server(input, output, session):
         shutil.copy2(src, dst)
         adata_path = str(dst)
 
-        # --- copy ATAC upload (optional) into upload_atac_dir ---
-        atac_path = None
-        atac_ups = atac_uploads_state.get()
+        # -----------------------
+        # Multiomics (optional) 
+        # -----------------------
+        
+        try:
+            do_multiomics = bool(input.do_multiomics())
+        except Exception:
+            do_multiomics = False
 
-        if atac_ups:
-            atac_src_path = atac_ups[-1]["path"]
-            atac_src = Path(atac_src_path).resolve()
+        # -----------------------
+        # Choose the tool input file (adata_path)
+        # -----------------------
+        adata_path = None
 
-            atac_dst = upload_atac_dir / atac_src.name
-            shutil.copy2(atac_src, atac_dst)
-            atac_path = str(atac_dst)
+        if do_multiomics:
+            # Multi-omics mode: build an integrated h5ad and run ALL tools on it
+            rna_info = rna_assay_state.get()
+            atac_info = atac_state.get()
 
-        # helpful for debugging / downstream use
-        results["_upload_visium_dir"] = str(upload_visium_dir)
-        results["_upload_atac_dir"] = str(upload_atac_dir)
-        results["_atac_h5ad"] = atac_path
+            if not rna_info or not atac_info:
+                results["_multiomics"] = {
+                    "ok": False,
+                    "error": "Multi-omics enabled, but RNA_Assay or ATAC upload is missing.",
+                }
+                tools_result.set(results)
+                return
+
+            # Copy inputs into the run folder (keeps runs reproducible)
+            upload_rna_dir = run_dir / "upload_rna_assay"
+            upload_rna_dir.mkdir(parents=True, exist_ok=True)
+
+            upload_atac_dir = run_dir / "upload_atac"
+            upload_atac_dir.mkdir(parents=True, exist_ok=True)
+
+            rna_dst = upload_rna_dir / Path(rna_info["name"]).name
+            atac_dst = upload_atac_dir / Path(atac_info["name"]).name
+
+            shutil.copy2(rna_info["path"], rna_dst)
+            shutil.copy2(atac_info["path"], atac_dst)
+
+            atac_seq_out = run_dir / "atac_seq_output"
+            atac_seq_out.mkdir(parents=True, exist_ok=True)
+
+            integrated_h5ad = atac_seq_out / "integrated_multiomics.h5ad"
+
+            results["_multiomics"] = run_multiomics_integration(
+                rna_h5ad=str(rna_dst),
+                atac_h5ad=str(atac_dst),
+                tmp_dir=atac_seq_out,
+                out_h5ad=integrated_h5ad,
+            )
+
+            if not results["_multiomics"].get("ok"):
+                tools_result.set(results)
+                return
+
+            # From here on, ALL tools run on the integrated file
+            adata_path = str(integrated_h5ad)
+
+            # Put the integrated file into upload_visium_dir so metrics can read it from that folder
+            try:
+                shutil.copy2(adata_path, upload_visium_dir / Path(adata_path).name)
+            except Exception:
+                pass
+
+            results["_upload_rna_assay_dir"] = str(upload_rna_dir)
+            results["_upload_atac_dir"] = str(upload_atac_dir)
+            results["_rna_assay_h5ad"] = str(rna_dst)
+            results["_atac_h5ad"] = str(atac_dst)
+            results["_integrated_h5ad"] = adata_path
+
+        else:
+            # Single-omics mode: tools run on the selected Visium (or demo) dataset
+            src_path = active_adata_path() or DEMO_PATH
+            src = Path(src_path)
+
+            if src_path == DEMO_PATH:
+                src = (project_root / DEMO_PATH).resolve()
+            else:
+                src = src.resolve()
+
+            dst = upload_visium_dir / src.name
+            shutil.copy2(src, dst)
+            adata_path = str(dst)
+
+
 
 
 
