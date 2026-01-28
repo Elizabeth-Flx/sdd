@@ -16,18 +16,13 @@ atac_csv="$tmp_dir/$(basename "${atac_file%.*}")_counts.csv"
 # Integrated matrix output file, temporary
 integrated_matrix_file="$tmp_dir/integrated_multiomics_matrix.csv"
 
-# Activate multi-omics integration environment
-source ~/miniforge3/bin/activate "$multiomics_env"
-# 1. Convert AnnData.X to CSV for Seurat
-python3 bin/writeX_tocsv.py --input_files "$rna_file" "$atac_file" --output_dir "$tmp_dir"
-# Deactivate multi-omics integration environment
-conda deactivate
+micromamba run -n "$multiomics_env" \
+    python3 multiomics/writeX_tocsv.py --input_files "$rna_file" "$atac_file" --output_dir "$tmp_dir"
+
 # 2. Run Seurat multi-omics integration in R
-source ~/miniforge3/bin/activate "$seurat_env"
-Rscript bin/seurat.R "$rna_csv" "$atac_csv" "$integrated_matrix_file"
-# Deactivate Seurat environment
-conda deactivate
+micromamba run -n "$seurat_env" \
+    Rscript multiomics/seurat.R "$rna_csv" "$atac_csv" "$integrated_matrix_file"
 
 # 3. Convert integrated matrix CSV back to AnnData
-source ~/miniforge3/bin/activate "$multiomics_env"
-python3 bin/build_integrated_anndata.py --seurat_matrix "$integrated_matrix_file" --rna_h5ad "$rna_file" --atac_h5ad "$atac_file" --output_h5ad "$out_file"
+micromamba run -n "$multiomics_env" \
+    python3 multiomics/build_integrated_anndata.py --seurat_matrix "$integrated_matrix_file" --rna_h5ad "$rna_file" --atac_h5ad "$atac_file" --output_h5ad "$out_file"
