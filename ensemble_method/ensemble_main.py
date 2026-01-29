@@ -24,19 +24,45 @@ import os
 csv_files = [f for f in os.listdir(data_path_dir) if f.endswith('.csv')]
 tools_df = []
 # see if len are identical
+indices = []
 lengths = []
-for f in csv_files:
-    df = pd.read_csv(os.path.join(data_path_dir, f), header=None, index_col=None)
-    lengths.append(df.shape[0])
-    method_name = f.split('.csv')[0]
+index_list = None  # reference order from the first CSV
+
+for f in sorted(csv_files):
+    df = pd.read_csv(os.path.join(data_path_dir, f), header=0, index_col=0)
+
+    # ensure index is barcode strings
+    df.index = df.index.astype(str)
+
+    method_name = f.rsplit(".csv", 1)[0]
     df.columns = [method_name]
-    # set index first to 1: so index starting from 1
-    df.index = range(1, df.shape[0] + 1)
+
+    # set reference barcode order from first file
+    if index_list is None:
+        index_list = df.index.tolist()
+    else:
+        # enforce same order + check for missing/extra barcodes
+        if set(df.index) != set(index_list):
+            missing = set(index_list) - set(df.index)
+            extra = set(df.index) - set(index_list)
+            raise ValueError(
+                f"{f}: barcode set mismatch. missing={list(missing)[:10]}, extra={list(extra)[:10]}"
+            )
+        df = df.reindex(index_list)
+
     tools_df.append(df)
-    
+
 combined_df = pd.concat(tools_df, axis=1)
-if len(set(lengths)) != 1:
-    raise ValueError("CSV files have different number of rows!")
+
+if index_list is None:
+    raise ValueError(f"No CSV files found in {data_path_dir}")
+
+combined_df = pd.concat(tools_df, axis=1)
+
+# strict check: ensure reindex did not introduce NaNs
+if combined_df.isna().any().any():
+    bad_cols = combined_df.columns[combined_df.isna().any()].tolist()
+    raise ValueError(f"NaNs after reindexing in columns: {bad_cols}")
 
 print("Combined dataframe shape: ", combined_df.shape)
 print("Combined dataframe tools: ", combined_df.columns.tolist())
@@ -53,7 +79,9 @@ cluster_segments = build_cluster_segments(bcs, C_total)
 print('finished building cluster segments\n')
 clsSim = jaccard_similarity_rows(cluster_segments)
 print('finished computing cluster similarities: Jaccard\n')
-clsSimRW = compute_pts_ii(clsSim, t=20)
+#clsSim = nmi_similarity_rows(cluster_segments)
+#print('finished computing cluster similarities: NMI\n')
+clsSimRW = compute_pts_ii(clsSim, t=10)
 print('finished computing cluster similarities: Random walk\n')
 method_spot_mats = build_method_spot_matrices(bcs, clsSimRW)
 print("Number of method spot matrices: ", len(method_spot_mats))
@@ -63,18 +91,30 @@ H, w = ensdd_weighted_consensus(method_spot_mats, niter=100, epsilon=1e-5)
 print("Consensus matrix H shape: ", H.shape)
 print('finished computing consensus matrix\n')
 print("Method weights: ", w)
-H_csr = dense_similarity_to_csr_knn(H, k=5, keep_diagonal=False, make_symmetric=True, dtype=np.float32)
-print('finished building consensus kNN graph\n')
-labels, info = leiden_final(H_csr, K=K, seed=0, partition_type="rb")
-print('finished Leiden clustering with \n')
-print("Leiden info: ", info)
+#H_csr = dense_similarity_to_csr_knn(H, k=50, tau=0.1, keep_diagonal=False, make_symmetric=True, dtype=np.float32)
+#print('finished building consensus kNN graph\n')
+#labels, info = leiden_final(H_csr, K=K, seed=0, partition_type="rb")
+#print('finished Leiden clustering with \n')
+#print("Leiden info: ", info)
+
+#labels, info = leiden_overcluster_then_merge(A_csr=H_csr, H=H, K=K, seed=0, partition_type="rb", r_start=0.1,)
+#print('finished Leiden clustering with \n')
+#print("Leiden info: ", info)
+
+labels = hc_from_consensus(H, K=K, linkage_method="average")
+print('finished Hierarchical Clustering to get final labels\n')
+
 
 # to output dataframe format
-leiden_df = pd.DataFrame(labels, index=spot_ids, columns=['leiden_clustering'])
+leiden_df = pd.DataFrame(
+    {"spatial_cluster": labels},
+    index=index_list
+)
+leiden_df.index.name = "barcode"
 
 # save to csv in same dir as input csvs
 path_ensemble = os.path.join(data_path_dir, 'ensemble.csv')
-leiden_df.to_csv(path_ensemble, header=False, index=False)
+leiden_df.to_csv(path_ensemble)
 
 print(f"Ensemble clustering labels saved to {path_ensemble}")
 print('Ensemble clustering process finished.')

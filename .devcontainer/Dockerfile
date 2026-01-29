@@ -63,7 +63,7 @@ RUN micromamba create -y -f /tmp/envs/t_stlearn_env.yml -n t_stlearn
 
 # ---- Ensemble Metrics ----
 COPY --chown=mambauser:mambauser envs/ensemble_metrics.yml /tmp/envs/ensemble_metrics.yml
-RUN micromamba create -y -f /tmp/envs/ensemble_metrics.yml -n sdd-metrics-real
+RUN micromamba create -y -f /tmp/envs/ensemble_metrics.yml -n sdd_metrics
 
 # ---- Seurat ----
 COPY --chown=mambauser:mambauser envs/seurat_env.yml /tmp/envs/seurat_env.yml
