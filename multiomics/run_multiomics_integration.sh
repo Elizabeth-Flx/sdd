@@ -20,9 +20,9 @@ micromamba run -n "$multiomics_env" \
     python3 multiomics/writeX_tocsv.py --input_files "$rna_file" "$atac_file" --output_dir "$tmp_dir"
 
 # 2. Run Seurat multi-omics integration in R
-micromamba run -n "$seurat_env" \
-    Rscript multiomics/seurat.R "$rna_csv" "$atac_csv" "$integrated_matrix_file"
+#micromamba run -n "$seurat_env" \
+#    Rscript multiomics/seurat.R "$rna_csv" "$atac_csv" "$integrated_matrix_file"
 
 # 3. Convert integrated matrix CSV back to AnnData
 micromamba run -n "$multiomics_env" \
-    python3 multiomics/build_integrated_anndata.py --seurat_matrix "$integrated_matrix_file" --rna_h5ad "$rna_file" --atac_h5ad "$atac_file" --output_h5ad "$out_file"
+    python3 multiomics/build_integrated_anndata.py --seurat_matrix "multiomics/integrated_multiomics_matrix2.csv" --rna_h5ad "$rna_file" --atac_h5ad "$atac_file" --output_h5ad "$out_file"

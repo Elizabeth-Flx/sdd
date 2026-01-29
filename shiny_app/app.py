@@ -234,6 +234,52 @@ app_ui = ui.page_sidebar(
 )
 
 
+def _get_spatial_lib_id(a):
+    """Return first library id inside adata.uns['spatial'] or None."""
+    if a is None:
+        return None
+    sp = a.uns.get("spatial", None)
+    if not isinstance(sp, dict) or len(sp) == 0:
+        return None
+    return next(iter(sp.keys()), None)
+
+def get_morphology_image(a, img_key="hires"):
+    """
+    Returns (img_array, extent) or (None, None).
+    extent is in the same coordinate system as a.obsm['spatial'] (Visium fullres coords).
+    """
+    if a is None:
+        return None, None
+    if "spatial" not in a.uns:
+        return None, None
+
+    lib_id = _get_spatial_lib_id(a)
+    if lib_id is None:
+        return None, None
+
+    sp = a.uns["spatial"].get(lib_id, {})
+    images = sp.get("images", {})
+    scalefactors = sp.get("scalefactors", {})
+
+    img = images.get(img_key, None)
+    if img is None:
+        return None, None
+
+    if img_key == "hires":
+        sf = scalefactors.get("tissue_hires_scalef", None)
+    else:
+        sf = scalefactors.get("tissue_lowres_scalef", None)
+
+    if sf is None:
+        # fallback: draw without extent mapping (still shows image but may not align)
+        return img, None
+
+    h, w = img.shape[:2]
+    extent = (0, w / sf, h / sf, 0)  
+    return img, extent
+
+
+
 # ---------------------------------------------------------------------
 # 3) Server
 # ---------------------------------------------------------------------
@@ -302,16 +348,12 @@ def server(input, output, session):
 
         info = file_list[0]
 
-        cache_dir = session_dir / "multiomics_uploads"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-
-        dst = cache_dir / f"rna-{uuid4().hex}-{Path(info['name']).name}"
-        shutil.copy2(info["datapath"], dst)
-
         rna_assay_state.set({
             "name": info["name"],
-            "path": str(dst),   # <- stabiler Pfad!
+            "path": info["datapath"],  
         })
+
+        print(f"[RNA] staged upload: {info['name']} @ {info['datapath']}", flush=True)
 
 
     @reactive.Effect
@@ -328,16 +370,12 @@ def server(input, output, session):
 
         info = file_list[0]
 
-        cache_dir = session_dir / "multiomics_uploads"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-
-        dst = cache_dir / f"atac-{uuid4().hex}-{Path(info['name']).name}"
-        shutil.copy2(info["datapath"], dst)
-
         atac_state.set({
             "name": info["name"],
-            "path": str(dst),
+            "path": info["datapath"],
         })
+
+        print(f"[ATAC] staged upload: {info['name']} @ {info['datapath']}", flush=True)
 
 
     @reactive.Effect
@@ -392,7 +430,7 @@ def server(input, output, session):
     def visium_upload_ui():
         try:
             if bool(input.do_multiomics()):
-                return ui.div()  # im Multiomics-Modus verstecken
+                return ui.div()  
         except Exception:
             pass
 
@@ -652,7 +690,6 @@ def server(input, output, session):
                 pass
 
             results["_multiomics_upload_dir"] = str(multiomics_upload_dir)
-            results["_upload_atac_dir"] = str(upload_atac_dir)
             results["_rna_assay_h5ad"] = str(rna_dst)
             results["_atac_h5ad"] = str(atac_dst)
             results["_integrated_h5ad"] = adata_path
