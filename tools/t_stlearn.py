@@ -4,6 +4,29 @@ import argparse
 from pathlib import Path
 
 def preprocessing(adata):
+    
+    library_id = list(adata.uns["spatial"].keys())[0]  # take the first library
+    adata.uns['spatial'][library_id]['use_quality'] = 'hires'  # or False
+    
+    print(adata.uns["spatial"][library_id]["images"].keys())
+    print(adata.uns["spatial"][library_id].keys())
+    
+    print(adata.obs.keys())
+    
+    try:
+        adata.obs['imagerow'] = adata.obs['array_row']
+        adata.obs['imagecol'] = adata.obs['array_col']
+    except:
+        pass
+
+    # generate features
+    st.pp.tiling(adata, out_path="tiling")
+    st.pp.extract_feature(
+        adata,
+        # model="resnet50",   # default, pretrained
+        # feature_type="global",  # global features per spot
+        verbose=True
+    )
 
     # Spatially-aware normalization and PCA
     adata.obs["imagerow"] = adata.obsm["spatial"][:, 1]
