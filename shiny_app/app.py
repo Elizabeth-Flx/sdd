@@ -152,10 +152,21 @@ app_ui = ui.page_sidebar(
         ui.output_ui("dataset_picker_ui"),
         ui.br(),
         ui.output_text_verbatim("info"),
+
+        ui.input_checkbox("show_morphology", "Show morphology (H&E)", value=False),
+        ui.input_select(
+            "morphology_key",
+            "Image resolution:",
+            choices={"hires": "hires", "lowres": "lowres"},
+            selected="hires",
+        ),
+
         ui.h4("2. Tools"),
+
         ui.input_checkbox_group(
             "tools",
             "Select tools to run:",
+            # Always-on BASS 
             choices={
                 "bayesspace": "BayesSpace",
                 "bass": "BASS",
@@ -164,7 +175,9 @@ app_ui = ui.page_sidebar(
                 "stlearn": "stLearn",
                 "ensemble": "Ensemble Method",
             },
+            selected=["bass"],
         ),
+
         ui.input_checkbox("run_metrics", "Calculate metrics after tools run", value=False),
         ui.input_action_button("run_tools", "Run selected tools"),
         ui.br(),
@@ -232,7 +245,6 @@ app_ui = ui.page_sidebar(
     ),
     title="Spatial Domain Detection",
 )
-
 
 def _get_spatial_lib_id(a):
     """Return first library id inside adata.uns['spatial'] or None."""
@@ -606,7 +618,10 @@ def server(input, output, session):
             tools_result.set({"error": {"ok": False, "error": "No dataset loaded."}})
             return
 
-        selected = input.tools() or []
+        selected = list(input.tools() or [])
+        if "bass" not in selected:
+            selected.insert(0, "bass") 
+
 
         if not selected:
             tools_result.set({})
@@ -634,7 +649,7 @@ def server(input, output, session):
         # -----------------------
         # Multiomics (optional) 
         # -----------------------
-        
+
         try:
             do_multiomics = bool(input.do_multiomics())
         except Exception:
@@ -746,15 +761,14 @@ def server(input, output, session):
                 return
 
         # 1) Run Bass first to get n_clusters if Bass is selected
-        if "bass" in selected:
-            results["bass"] = run_tool("bass", adata_path, csv_dir, r_input_dir, n_clusters=None)
+        results["bass"] = run_tool("bass", adata_path, csv_dir, r_input_dir, n_clusters=None)
 
-            n_clusters = read_bass_n_clusters(csv_dir)
-            results["_bass_n_clusters"] = {
-                "ok": n_clusters is not None,
-                "value": n_clusters,
-                "path": str((csv_dir / "bass_n_clusters.txt").resolve()),
-            }
+        n_clusters = read_bass_n_clusters(csv_dir)
+        results["_bass_n_clusters"] = {
+            "ok": n_clusters is not None,
+            "value": n_clusters,
+            "path": str((csv_dir / "bass_n_clusters.txt").resolve()),
+        }
 
         # 2) Run other selected tools with n_clusters if available
         for tool_key in selected:
@@ -1064,6 +1078,27 @@ def server(input, output, session):
 
         fig, ax = plt.subplots(figsize=(5, 5))
 
+        # ---- morphology background (optional) ----
+        show_img = False
+        try:
+            show_img = bool(input.show_morphology())
+        except Exception:
+            show_img = False
+
+        img_key = "hires"
+        try:
+            img_key = input.morphology_key()
+        except Exception:
+            pass
+
+        if show_img:
+            img, extent = get_morphology_image(a, img_key=img_key)
+            if img is not None:
+                if extent is not None:
+                    ax.imshow(img, extent=extent, origin="upper")
+                else:
+                    ax.imshow(img, origin="upper")
+
         if col in a.obs.columns:
             s = a.obs[col]
             cats = s.astype("category")
@@ -1159,6 +1194,27 @@ def server(input, output, session):
             pass
 
         fig, ax = plt.subplots(figsize=(5, 5))
+
+        # ---- morphology background (optional) ----
+        show_img = False
+        try:
+            show_img = bool(input.show_morphology())
+        except Exception:
+            show_img = False
+
+        img_key = "hires"
+        try:
+            img_key = input.morphology_key()
+        except Exception:
+            pass
+
+        if show_img:
+            img, extent = get_morphology_image(a, img_key=img_key)
+            if img is not None:
+                if extent is not None:
+                    ax.imshow(img, extent=extent, origin="upper")
+                else:
+                    ax.imshow(img, origin="upper")
 
         if color_by and color_by in a.obs.columns:
             s = a.obs[color_by]
