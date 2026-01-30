@@ -2,16 +2,17 @@ from . import dataloader as dl
 import stlearn as st
 import argparse
 from pathlib import Path
+import numpy as np
 
 def preprocessing(adata):
     
-    library_id = list(adata.uns["spatial"].keys())[0]  # take the first library
-    adata.uns['spatial'][library_id]['use_quality'] = 'hires'  # or False
+    #library_id = list(adata.uns["spatial"].keys())[0]  # take the first library
+    #adata.uns['spatial'][library_id]['use_quality'] = 'hires'  # or False
     
-    print(adata.uns["spatial"][library_id]["images"].keys())
-    print(adata.uns["spatial"][library_id].keys())
+    #print(adata.uns["spatial"][library_id]["images"].keys())
+    #print(adata.uns["spatial"][library_id].keys())
     
-    print(adata.obs.keys())
+    #print(adata.obs.keys())
     
     try:
         adata.obs['imagerow'] = adata.obs['array_row']
@@ -19,22 +20,16 @@ def preprocessing(adata):
     except:
         pass
 
-    # generate features
-    st.pp.tiling(adata, out_path="tiling")
-    st.pp.extract_feature(
-        adata,
-        # model="resnet50",   # default, pretrained
-        # feature_type="global",  # global features per spot
-        verbose=True
-    )
-
     # Spatially-aware normalization and PCA
     adata.obs["imagerow"] = adata.obsm["spatial"][:, 1]
     adata.obs["imagecol"] = adata.obsm["spatial"][:, 0]
 
     # only add if not already present
-    if "X_morphology" not in adata.obsm:
-        adata.obsm["X_morphology"] = adata.obsm["features"]
+    try:
+        if "X_morphology" not in adata.obsm:
+            adata.obsm["X_morphology"] = adata.obsm["features"]
+    except:
+        adata.obsm["X_morphology"] = np.zeros((adata.n_obs, 1))
 
     st.em.run_pca(adata, n_comps=50)
 

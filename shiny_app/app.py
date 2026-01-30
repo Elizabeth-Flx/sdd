@@ -93,6 +93,51 @@ def read_bass_n_clusters(csv_dir: Path) -> int | None:
     except Exception:
         return None
 
+def run_groundtruth_export(adata_path: str, csv_dir: Path, gt_col: str) -> dict:
+    """
+    Exports adata.obs[gt_col] as ground truth CSV into csv_dir via dataloader.py subprocess.
+    Returns dict with status + output path.
+    """
+    project_root = Path(__file__).resolve().parents[1]
+    out_csv = (csv_dir / "groundtruth.csv").resolve()
+
+    cmd = [
+        "micromamba", "run", "-n", "t_stlearn",   
+        "python", "-m", "tools.dataloader",       
+        "--input", str(adata_path),
+        "--output", str(out_csv),
+        "--index_name", str(gt_col),
+    ]
+
+    try:
+        p = subprocess.run(
+            cmd,
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return {
+            "ok": out_csv.exists(),
+            "cmd": cmd,
+            "returncode": p.returncode,
+            "stdout": (p.stdout or "")[-4000:],
+            "stderr": (p.stderr or "")[-4000:],
+            "output": str(out_csv) if out_csv.exists() else None,
+        }
+    except subprocess.CalledProcessError as e:
+        return {
+            "ok": False,
+            "cmd": cmd,
+            "returncode": e.returncode,
+            "stdout": (e.stdout or "")[-4000:],
+            "stderr": (e.stderr or "")[-4000:],
+            "output": None,
+        }
+    except Exception as e:
+        return {"ok": False, "cmd": cmd, "error": repr(e), "output": None}
+
+
 def run_multiomics_integration(rna_h5ad: str, atac_h5ad: str, tmp_dir: Path, out_h5ad: Path) -> dict:
     project_root = Path(__file__).resolve().parents[1]
 
@@ -161,6 +206,8 @@ app_ui = ui.page_sidebar(
             selected="hires",
         ),
 
+        ui.output_ui("gt_col_ui"),
+
         ui.h4("2. Tools"),
 
         ui.input_checkbox_group(
@@ -223,7 +270,6 @@ app_ui = ui.page_sidebar(
         ),
         ui.card(
             ui.card_header("Metrics plots"),
-            ui.output_ui("gt_col_ui"),
             ui.input_select(
                 "metrics_plot_kind",
                 "Plot type:",
@@ -645,7 +691,6 @@ def server(input, output, session):
         multiomics_upload_dir.mkdir(parents=True, exist_ok=True)
 
         project_root = Path(__file__).resolve().parents[1]
-
         # -----------------------
         # Multiomics (optional) 
         # -----------------------
@@ -722,6 +767,24 @@ def server(input, output, session):
             dst = upload_visium_dir / src.name
             shutil.copy2(src, dst)
             adata_path = str(dst)
+
+        # -----------------------
+        # Ground truth export (optional, BEFORE tools)
+        # -----------------------
+        gt_col = None
+        try:
+            gt_col = input.gt_col()
+        except Exception:
+            gt_col = None
+
+        if gt_col and gt_col != "__none__":
+            results["_groundtruth"] = run_groundtruth_export(
+                adata_path=adata_path,
+                csv_dir=csv_dir,
+                gt_col=gt_col,
+            )
+        else:
+            results["_groundtruth"] = {"ok": False, "skipped": True, "reason": "no ground truth selected"}
 
 
 
