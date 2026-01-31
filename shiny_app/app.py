@@ -234,8 +234,13 @@ app_ui = ui.page_sidebar(
         ui.card(
             ui.card_header("Visualization"),
             ui.output_ui("color_by_ui"),
+            ui.input_slider(
+                "point_size",
+                "Point size (Spatial plots):",
+                min=1, max=30, value=12, step=1,
+            ),
             ui.br(),
-            ui.output_text_verbatim("plot_info"),
+            ui.output_text_verbatim("plot_info"),          
             ui.output_plot("visium_plot"),
         ),
         ui.card(
@@ -443,7 +448,11 @@ def server(input, output, session):
             tools.insert(0, "bass")
             ui.update_checkbox_group("tools", selected=tools)
 
-
+    def get_point_size(default=10):
+        try:
+            return float(input.point_size())
+        except Exception:
+            return default
 
     @output
     @render.ui
@@ -1141,6 +1150,9 @@ def server(input, output, session):
 
         fig, ax = plt.subplots(figsize=(5, 5))
 
+        pt = get_point_size(default=12)
+
+
         # ---- morphology background (optional) ----
         show_img = False
         try:
@@ -1166,7 +1178,7 @@ def server(input, output, session):
             s = a.obs[col]
             cats = s.astype("category")
             codes = cats.cat.codes.to_numpy()
-            sc_plt = ax.scatter(x, y, c=codes, s=12, alpha=0.9)
+            sc_plt = ax.scatter(x, y, c=codes, s=pt, alpha=0.9)
 
             handles = []
             max_code = codes.max() if codes.size else 0
@@ -1258,6 +1270,8 @@ def server(input, output, session):
 
         fig, ax = plt.subplots(figsize=(5, 5))
 
+        pt = get_point_size(default=12)
+
         # ---- morphology background (optional) ----
         show_img = False
         try:
@@ -1285,7 +1299,7 @@ def server(input, output, session):
             if s.dtype.name == "category" or s.dtype == object:
                 categories = s.astype("category")
                 codes = categories.cat.codes.to_numpy()
-                sc_plt = ax.scatter(x, y, c=codes, s=10, alpha=0.85)
+                sc_plt = ax.scatter(x, y, c=codes, s=pt, alpha=0.85)
 
                 handles = []
                 max_code = codes.max() if codes.size else 0
@@ -1303,12 +1317,11 @@ def server(input, output, session):
 
                 ax.legend(handles=handles, title=color_by, bbox_to_anchor=(1.05, 1), loc="upper left")
             else:
-                sc_plt = ax.scatter(x, y, c=s.to_numpy(), s=10, alpha=0.85)
+                sc_plt = ax.scatter(x, y, c=s.to_numpy(), s=pt, alpha=0.85)
                 cbar = plt.colorbar(sc_plt, ax=ax)
                 cbar.set_label(color_by)
         else:
-            ax.scatter(x, y, s=10, alpha=0.85)
-
+            ax.scatter(x, y, s=pt, alpha=0.85)
         ax.set_xlabel("x")
         ax.set_ylabel("y")
         ax.set_title("Visium Spatial Plot")
