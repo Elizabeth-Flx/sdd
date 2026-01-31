@@ -21,7 +21,7 @@ print('Input csv files directory:', data_path_dir)
 
 # for all csvs in dir: read in each csv (only one column per csv) to dataframe to use
 import os
-csv_files = [f for f in os.listdir(data_path_dir) if f.endswith('.csv')]
+csv_files = [f for f in os.listdir(data_path_dir) if f.endswith('.csv') and not f.lower().startswith("groundtruth") and not f.lower().startswith("ensemble")]
 tools_df = []
 # see if len are identical
 indices = []
