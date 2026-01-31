@@ -3,6 +3,7 @@ import pandas as pd
 import scanpy as sc
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+import matplotlib.colors as mcolors
 MPL_BASE = mpl.rcParams.copy()
 import numpy as np
 import subprocess
@@ -137,6 +138,20 @@ def run_groundtruth_export(adata_path: str, csv_dir: Path, gt_col: str) -> dict:
     except Exception as e:
         return {"ok": False, "cmd": cmd, "error": repr(e), "output": None}
 
+def categorical_colors(series, cmap_name="tab20"):
+    cats = series.astype("category")
+    categories = list(cats.cat.categories)
+    codes = cats.cat.codes.to_numpy()
+    n = len(categories)
+
+    if n <= 20:
+        cmap = plt.get_cmap("tab20", n)
+    else:
+        cmap = plt.get_cmap("hsv", n)
+
+    colors = [mcolors.to_hex(cmap(i)) for i in range(n)]
+    return cats, categories, codes, colors
+
 
 def run_multiomics_integration(rna_h5ad: str, atac_h5ad: str, tmp_dir: Path, out_h5ad: Path) -> dict:
     project_root = Path(__file__).resolve().parents[1]
@@ -242,6 +257,12 @@ app_ui = ui.page_sidebar(
             ui.br(),
             ui.output_text_verbatim("plot_info"),          
             ui.output_plot("visium_plot"),
+            ui.card(
+                ui.card_header("Legend"),
+                ui.output_ui("legend_ui"),
+                style="max-height: 300px; overflow-y: auto;"
+            ),
+
         ),
         ui.card(
             ui.card_header("SCAN-IT result"),
@@ -464,6 +485,49 @@ def server(input, output, session):
         choices = {u["id"]: f"{u['name']} ({u['id'][:6]})" for u in ups}
         selected = ups[-1]["id"]   
         return ui.input_select("active_upload", "Active dataset:", choices, selected=selected)
+
+
+    @output
+    @render.ui
+    def legend_ui():
+        a = adata()
+        if a is None:
+            return ui.div("No data.")
+
+        try:
+            color_by = input.color_by()
+        except Exception:
+            return ui.div()
+
+        if not color_by or color_by not in a.obs.columns:
+            return ui.div("No legend.")
+
+        s = a.obs[color_by]
+        if not (s.dtype.name == "category" or s.dtype == object):
+            return ui.div("Legend only for categorical columns.")
+
+        cats, categories, codes, colors = categorical_colors(s)
+
+        items = []
+        for label, col in zip(categories, colors):
+            items.append(
+                ui.div(
+                    ui.span(
+                        style=(
+                            "display:inline-block;width:10px;height:10px;"
+                            f"border-radius:50%;background:{col};margin-right:8px;"
+                        )
+                    ),
+                    ui.span(str(label)),
+                    style="display:flex;align-items:center;margin:4px 0;"
+                )
+            )
+
+        return ui.div(
+            *items,
+            style="max-height: 480px; overflow-y: auto; padding-right: 6px;"
+        )
+
 
 
     @output
@@ -1297,31 +1361,17 @@ def server(input, output, session):
             s = a.obs[color_by]
 
             if s.dtype.name == "category" or s.dtype == object:
-                categories = s.astype("category")
-                codes = categories.cat.codes.to_numpy()
-                sc_plt = ax.scatter(x, y, c=codes, s=pt, alpha=0.85)
-
-                handles = []
-                max_code = codes.max() if codes.size else 0
-                for cat_value in categories.cat.categories:
-                    idxs = np.where(categories.to_numpy() == cat_value)[0]
-                    if len(idxs) == 0:
-                        continue
-                    idx = idxs[0]
-                    norm_value = codes[idx] / max_code if max_code > 0 else 0
-                    color = sc_plt.cmap(norm_value)
-                    handles.append(
-                        plt.Line2D([], [], marker="o", color=color, linestyle="",
-                                   label=str(cat_value), markersize=6)
-                    )
-
-                ax.legend(handles=handles, title=color_by, bbox_to_anchor=(1.05, 1), loc="upper left")
+                cats, categories, codes, colors = categorical_colors(s)
+                # codes direkt mappen auf discrete cmap
+                cmap = mcolors.ListedColormap(colors)
+                ax.scatter(x, y, c=codes, s=pt, alpha=0.85, cmap=cmap, vmin=-0.5, vmax=len(colors)-0.5)
             else:
                 sc_plt = ax.scatter(x, y, c=s.to_numpy(), s=pt, alpha=0.85)
                 cbar = plt.colorbar(sc_plt, ax=ax)
                 cbar.set_label(color_by)
         else:
             ax.scatter(x, y, s=pt, alpha=0.85)
+
         ax.set_xlabel("x")
         ax.set_ylabel("y")
         ax.set_title("Visium Spatial Plot")
