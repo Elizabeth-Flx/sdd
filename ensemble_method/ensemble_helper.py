@@ -59,6 +59,70 @@ def jaccard_similarity_rows(A: sp.csr_matrix) -> np.ndarray:
         S = np.divide(inter, union, out=np.zeros_like(inter, dtype=np.float32), where=(union > 0))
     return S
 
+import numpy as np
+import scipy.sparse as sp
+
+def nmi_similarity_rows(A: sp.csr_matrix, eps: float = 1e-12) -> np.ndarray:
+    """
+    NMI similarity between rows of sparse binary matrix A (C x N).
+    Each row is a cluster-segment membership indicator over N spots.
+    Returns dense (C x C) in [0, 1] (approximately; numerical eps may cause tiny negatives).
+    """
+    A = A.astype(np.float32)
+    C, N = A.shape
+    # n11 = intersections between cluster segments
+    n11 = (A @ A.T).toarray().astype(np.float64)  # (C x C)
+    # row sums = cluster sizes
+    a = np.asarray(A.sum(axis=1)).reshape(-1).astype(np.float64)
+    b = a
+    # build all 2x2 counts for each pair (i,j)
+    n10 = a[:, None] - n11
+    n01 = b[None, :] - n11
+    n00 = N - (a[:, None] + b[None, :]) + n11
+    # to props
+    p11 = n11 / N
+    p10 = n10 / N
+    p01 = n01 / N
+    p00 = n00 / N
+    # marginals
+    px1 = a / N
+    px0 = 1.0 - px1
+    py1 = px1
+    py0 = 1.0 - py1
+
+    # helper: term = p(xy) * log( p(xy) / (p(x)*p(y)) ), with safe masking
+    def mi_term(pxy, px, py):
+        denom = (px[:, None] * py[None, :]) + eps
+        ratio = (pxy + eps) / denom
+        return np.where(pxy > 0, pxy * np.log(ratio), 0.0)
+
+    MI = (
+        mi_term(p11, px1, py1) +
+        mi_term(p10, px1, py0) +
+        mi_term(p01, px0, py1) +
+        mi_term(p00, px0, py0)
+    )
+
+    # entropies H(X) and H(Y) for each row-variable (binary)
+    def H_binary(p1):
+        p1 = np.clip(p1, eps, 1.0 - eps)
+        p0 = 1.0 - p1
+        return -(p1 * np.log(p1) + p0 * np.log(p0))
+
+    Hx = H_binary(px1)  # (C,)
+    Hy = Hx.copy()
+
+    denom = np.sqrt(Hx[:, None] * Hy[None, :]) + eps
+    NMI = MI / denom
+
+    # numeric cleanup
+    NMI = np.clip(NMI, 0.0, 1.0)
+
+    # set perfect self-similarity
+    np.fill_diagonal(NMI, 1.0)
+    return NMI.astype(np.float32)
+
+
 # random walk enhancements
 def compute_pts_ii(S: np.ndarray, t: int = 20) -> np.ndarray:
     """
@@ -184,7 +248,8 @@ def dense_similarity_to_csr_knn(
     k: int = 30,
     keep_diagonal: bool = False,
     make_symmetric: bool = True,
-    dtype=np.float32
+    dtype=np.float32,
+    tau : float = 0.0,
 ) -> sp.csr_matrix:
     """
     Build a kNN graph (per row keep top-k similarities).
@@ -208,7 +273,7 @@ def dense_similarity_to_csr_knn(
         # indices of top-k (excluding -inf)
         idx = np.argpartition(row, -k)[-k:]
         # filter out invalid
-        idx = idx[np.isfinite(row[idx])]
+        idx = idx[np.isfinite(row[idx]) & (row[idx] > tau)]
         rows.extend([i] * len(idx))
         cols.extend(idx.tolist())
         data.extend(row[idx].astype(dtype, copy=False).tolist())
@@ -313,7 +378,7 @@ def tune_resolution_for_k(A: sp.csr_matrix, K: int,
         else:
             lo = mid
 
-    # fallback: closest we saw so far...
+    # fallback: 
     return best[2], best[1], history
 
 # see which to use leiden
@@ -351,3 +416,101 @@ def leiden_final(A: sp.csr_matrix,
     #)
     #return labels, {"mode": "auto_bic", "resolution": float(res_best),
     #                "k": int(np.unique(labels).size), "scan": table}
+    
+
+def get_cluster_centroids_from_H(H: np.ndarray, labels: np.ndarray):
+    """
+    Build cluster-cluster similarity matrix S (k0 x k0) from consensus H (N x N)
+    by averaging H over pairs of points across clusters.
+    """
+    labels = np.asarray(labels)
+    clus = np.unique(labels)
+    k0 = len(clus)
+    idx = [np.where(labels == c)[0] for c in clus]
+
+    S = np.zeros((k0, k0), dtype=np.float64)
+    for i in range(k0):
+        Ii = idx[i]
+        for j in range(i, k0):
+            Ij = idx[j]
+            # mean similarity between clusters i and j
+            val = H[np.ix_(Ii, Ij)].mean()
+            S[i, j] = val
+            S[j, i] = val
+    np.fill_diagonal(S, 1.0)
+    return S, clus
+
+def merge_to_exact_k_using_H(H: np.ndarray, labels: np.ndarray, K: int, linkage_method="average"):
+    """
+    Merge Leiden clusters down to exactly K using hierarchical clustering on (1 - similarity).
+    """
+    S, clus = get_cluster_centroids_from_H(H, labels)  # k0 x k0 similarity
+    k0 = S.shape[0]
+    if k0 < K:
+        raise ValueError(f"Cannot merge up: only {k0} clusters but need K={K}. Overcluster first.")
+
+    # convert similarity to distance
+    D = 1.0 - S
+    np.fill_diagonal(D, 0.0)
+
+    # condensed distance vector for scipy linkage
+    dvec = squareform(D, checks=False)
+    Z = linkage(dvec, method=linkage_method)
+
+    # cluster the k0 “Leiden clusters” into exactly K groups
+    super_labels = fcluster(Z, t=K, criterion="maxclust")  # values 1..K
+
+    # map each original cell/spot label to merged label
+    mapping = {clus[i]: int(super_labels[i] - 1) for i in range(k0)}  # 0..K-1
+    merged = np.vectorize(mapping.get)(labels).astype(np.int32)
+    return merged
+
+def leiden_overcluster_then_merge(A_csr: sp.csr_matrix, H: np.ndarray, K: int,
+                                  seed: int = 0, partition_type: str = "rb",
+                                  r_start: float = 0.1, r_max: float = 20.0,
+                                  step: float = 1.25):
+    """
+    1) run Leiden with increasing resolution until k0 >= K
+    2) merge clusters down to exactly K using consensus H
+    """
+    r = r_start
+    last = None
+    target = 2 * K
+
+    while r <= r_max:
+        labels = leiden_from_csr(A_csr, resolution=r, seed=seed, partition_type=partition_type)
+        k0 = np.unique(labels).size
+        last = (labels, r, k0)
+        if k0 >= target:
+            break
+        r *= step
+
+    if last is None:
+        raise RuntimeError("Leiden did not run.")
+    labels, r_used, k0 = last
+
+    if k0 < K:
+        raise RuntimeError(
+            f"Could not reach at least K clusters. Max resolution {r_max} gave k0={k0} < K={K}."
+        )
+
+    merged = merge_to_exact_k_using_H(H, labels, K, linkage_method="average")
+    return merged, {"leiden_resolution": r_used, "k0_before_merge": k0, "K_final": K}
+
+# hierarchical for small cases
+def hc_from_consensus(H: np.ndarray, K: int, linkage_method: str = "average") -> np.ndarray:
+    # symmetrize + clean
+    H = 0.5 * (H + H.T)
+    np.fill_diagonal(H, 1.0)
+
+    # distance = 1 - similarity
+    D = 1.0 - H
+    np.fill_diagonal(D, 0.0)
+
+    # scipy linkage needs condensed distance vector
+    dvec = squareform(D, checks=False)
+    Z = linkage(dvec, method=linkage_method)
+
+    # exactly K clusters (labels 0..K-1)
+    labels = fcluster(Z, t=K, criterion="maxclust") - 1
+    return labels.astype(np.int32)

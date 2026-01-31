@@ -198,7 +198,6 @@ def plot_metric_boxplots_gg(metric_df, metric_name, save_path):
 # Lineplots 
 def plot_metric_lineplot_datasets_gg(metric_df, metric_name, save_path):
     p = (ggplot(metric_df, aes(x='Dataset', y=metric_name, color=metric_name, group='Method')) +
-         geom_line(size=1) +
          geom_point(size=2) +
          ggtitle(f'Line Plot of {metric_name} Scores by Method across Datasets') +
          xlab('Dataset') +
@@ -216,7 +215,6 @@ def plot_means_lineplot(mean_df, title, save_path = None):
 
     p = (
         ggplot(df_long, aes(x="Method", y="Mean_Score", color="Metric", group="Metric"))
-        + geom_line(size=1)
         + geom_point(size=2)
         + ggtitle(title)
         + xlab("Method")
