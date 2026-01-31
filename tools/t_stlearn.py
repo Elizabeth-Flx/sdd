@@ -20,6 +20,17 @@ def preprocessing(adata):
     except:
         pass
 
+    try:
+        adata.obs['imagerow'] = adata.obs['centroid_y']
+        adata.obs['imagecol'] = adata.obs['centroid_x']
+    except:
+        pass
+
+    try:
+        adata.obs['array_row'] = adata.obs['centroid_y']
+        adata.obs['array_col'] = adata.obs['centroid_x']
+    except:
+        pass
     # Spatially-aware normalization and PCA
     adata.obs["imagerow"] = adata.obsm["spatial"][:, 1]
     adata.obs["imagecol"] = adata.obsm["spatial"][:, 0]
