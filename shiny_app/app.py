@@ -3,6 +3,7 @@ import pandas as pd
 import scanpy as sc
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+import matplotlib.colors as mcolors
 MPL_BASE = mpl.rcParams.copy()
 import numpy as np
 import subprocess
@@ -20,6 +21,8 @@ sys.path.insert(0, str(project_root))
 
 from evaluation_metrics.utils import load_csvs_to_arrays
 from evaluation_metrics.plots import plot_means_lineplot, plot_sankey_diagram
+
+
 
 
 # ---------------------------------------------------------------------
@@ -91,6 +94,107 @@ def read_bass_n_clusters(csv_dir: Path) -> int | None:
     except Exception:
         return None
 
+def run_groundtruth_export(adata_path: str, csv_dir: Path, gt_col: str) -> dict:
+    """
+    Exports adata.obs[gt_col] as ground truth CSV into csv_dir via dataloader.py subprocess.
+    Returns dict with status + output path.
+    """
+    project_root = Path(__file__).resolve().parents[1]
+    out_csv = (csv_dir / "groundtruth.csv").resolve()
+
+    cmd = [
+        "micromamba", "run", "-n", "t_stlearn",   
+        "python", "-m", "tools.dataloader",       
+        "--input", str(adata_path),
+        "--output", str(out_csv),
+        "--index_name", str(gt_col),
+    ]
+
+    try:
+        p = subprocess.run(
+            cmd,
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return {
+            "ok": out_csv.exists(),
+            "cmd": cmd,
+            "returncode": p.returncode,
+            "stdout": (p.stdout or "")[-4000:],
+            "stderr": (p.stderr or "")[-4000:],
+            "output": str(out_csv) if out_csv.exists() else None,
+        }
+    except subprocess.CalledProcessError as e:
+        return {
+            "ok": False,
+            "cmd": cmd,
+            "returncode": e.returncode,
+            "stdout": (e.stdout or "")[-4000:],
+            "stderr": (e.stderr or "")[-4000:],
+            "output": None,
+        }
+    except Exception as e:
+        return {"ok": False, "cmd": cmd, "error": repr(e), "output": None}
+
+def categorical_colors(series, cmap_name="tab20"):
+    cats = series.astype("category")
+    categories = list(cats.cat.categories)
+    codes = cats.cat.codes.to_numpy()
+    n = len(categories)
+
+    if n <= 20:
+        cmap = plt.get_cmap("tab20", n)
+    else:
+        cmap = plt.get_cmap("hsv", n)
+
+    colors = [mcolors.to_hex(cmap(i)) for i in range(n)]
+    return cats, categories, codes, colors
+
+
+def run_multiomics_integration(rna_h5ad: str, atac_h5ad: str, tmp_dir: Path, out_h5ad: Path) -> dict:
+    project_root = Path(__file__).resolve().parents[1]
+
+    cmd = [
+        "bash", "multiomics/run_multiomics_integration.sh",
+        rna_h5ad,
+        atac_h5ad,
+        "shiny",
+        "seurat_env",
+        str(tmp_dir),
+        str(out_h5ad),
+    ]
+
+    try:
+        p = subprocess.run(
+            cmd,
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        ok = out_h5ad.exists()
+        return {
+            "ok": ok,
+            "cmd": cmd,
+            "returncode": p.returncode,
+            "stdout": (p.stdout or "")[-4000:],
+            "stderr": (p.stderr or "")[-4000:],
+            "output_h5ad": str(out_h5ad) if ok else None,
+        }
+    except subprocess.CalledProcessError as e:
+        return {
+            "ok": False,
+            "cmd": cmd,
+            "returncode": e.returncode,
+            "stdout": (e.stdout or "")[-4000:],
+            "stderr": (e.stderr or "")[-4000:],
+            "output_h5ad": None,
+        }
+    except Exception as e:
+        return {"ok": False, "cmd": cmd, "error": repr(e), "output_h5ad": None}
+
 
 
 
@@ -100,33 +204,42 @@ def read_bass_n_clusters(csv_dir: Path) -> int | None:
 app_ui = ui.page_sidebar(
     ui.sidebar(
         ui.h4("1. Data input"),
-        ui.input_file(
-            "file",
-            "Upload a spatial dataset (.h5ad)",
-            multiple=True,
-            accept=[".h5ad"],
-        ),
-        ui.input_file(
-            "file_atac",
-            "Upload an ATAC dataset (.h5ad)",
-            multiple=True,
-            accept=[".h5ad"],
-        ),
+        ui.output_ui("visium_upload_ui"),
+
+        ui.input_checkbox("do_multiomics", "Enable multi-omics", value=False),
+        ui.output_ui("multiomics_upload_ui"),
+
         ui.output_ui("dataset_picker_ui"),
         ui.br(),
         ui.output_text_verbatim("info"),
+
+        ui.input_checkbox("show_morphology", "Show morphology (H&E)", value=False),
+        ui.input_select(
+            "morphology_key",
+            "Image resolution:",
+            choices={"hires": "hires", "lowres": "lowres"},
+            selected="hires",
+        ),
+
+        ui.output_ui("gt_col_ui"),
+
         ui.h4("2. Tools"),
+
         ui.input_checkbox_group(
             "tools",
             "Select tools to run:",
+            # Always-on BASS 
             choices={
                 "bayesspace": "BayesSpace",
                 "bass": "BASS",
                 "graphst": "GraphST",
                 "scanit": "SCAN-IT",
                 "stlearn": "stLearn",
+                "ensemble": "Ensemble Method",
             },
+            selected=["bass"],
         ),
+
         ui.input_checkbox("run_metrics", "Calculate metrics after tools run", value=False),
         ui.input_action_button("run_tools", "Run selected tools"),
         ui.br(),
@@ -136,9 +249,20 @@ app_ui = ui.page_sidebar(
         ui.card(
             ui.card_header("Visualization"),
             ui.output_ui("color_by_ui"),
+            ui.input_slider(
+                "point_size",
+                "Point size (Spatial plots):",
+                min=1, max=30, value=12, step=1,
+            ),
             ui.br(),
-            ui.output_text_verbatim("plot_info"),
+            ui.output_text_verbatim("plot_info"),          
             ui.output_plot("visium_plot"),
+            ui.card(
+                ui.card_header("Legend"),
+                ui.output_ui("legend_ui"),
+                style="max-height: 300px; overflow-y: auto;"
+            ),
+
         ),
         ui.card(
             ui.card_header("SCAN-IT result"),
@@ -166,8 +290,12 @@ app_ui = ui.page_sidebar(
             ui.output_plot("bass_plot"),
         ),
         ui.card(
+            ui.card_header("Ensemble result"),
+            ui.output_text_verbatim("ensemble_plot_info"),
+            ui.output_plot("ensemble_plot"),
+        ),
+        ui.card(
             ui.card_header("Metrics plots"),
-            ui.output_ui("gt_col_ui"),
             ui.input_select(
                 "metrics_plot_kind",
                 "Plot type:",
@@ -189,6 +317,51 @@ app_ui = ui.page_sidebar(
     ),
     title="Spatial Domain Detection",
 )
+
+def _get_spatial_lib_id(a):
+    """Return first library id inside adata.uns['spatial'] or None."""
+    if a is None:
+        return None
+    sp = a.uns.get("spatial", None)
+    if not isinstance(sp, dict) or len(sp) == 0:
+        return None
+    return next(iter(sp.keys()), None)
+
+def get_morphology_image(a, img_key="hires"):
+    """
+    Returns (img_array, extent) or (None, None).
+    extent is in the same coordinate system as a.obsm['spatial'] (Visium fullres coords).
+    """
+    if a is None:
+        return None, None
+    if "spatial" not in a.uns:
+        return None, None
+
+    lib_id = _get_spatial_lib_id(a)
+    if lib_id is None:
+        return None, None
+
+    sp = a.uns["spatial"].get(lib_id, {})
+    images = sp.get("images", {})
+    scalefactors = sp.get("scalefactors", {})
+
+    img = images.get(img_key, None)
+    if img is None:
+        return None, None
+
+    if img_key == "hires":
+        sf = scalefactors.get("tissue_hires_scalef", None)
+    else:
+        sf = scalefactors.get("tissue_lowres_scalef", None)
+
+    if sf is None:
+        # fallback: draw without extent mapping (still shows image but may not align)
+        return img, None
+
+    h, w = img.shape[:2]
+    extent = (0, w / sf, h / sf, 0)  
+    return img, extent
+
 
 
 # ---------------------------------------------------------------------
@@ -217,7 +390,8 @@ def server(input, output, session):
 
     uploads_state = reactive.Value([])
 
-    atac_uploads_state = reactive.Value([])
+    rna_assay_state = reactive.Value(None)
+    atac_state = reactive.Value(None)
 
     @reactive.Effect
     def _track_uploads():
@@ -245,31 +419,61 @@ def server(input, output, session):
             uploads_state.set(current + new_entries)
     
     @reactive.Effect
-    def _track_atac_uploads():
+    def _track_rna_assay_upload():
+        try:
+            if not bool(input.do_multiomics()):
+                return
+        except Exception:
+            return
+
+        file_list = input.file_rna_assay() or []
+        if not file_list:
+            return
+
+        info = file_list[0]
+
+        rna_assay_state.set({
+            "name": info["name"],
+            "path": info["datapath"],  
+        })
+
+        print(f"[RNA] staged upload: {info['name']} @ {info['datapath']}", flush=True)
+
+
+    @reactive.Effect
+    def _track_atac_upload():
+        try:
+            if not bool(input.do_multiomics()):
+                return
+        except Exception:
+            return
+
         file_list = input.file_atac() or []
         if not file_list:
             return
 
-        current = atac_uploads_state.get()
-        seen_srcs = {u["src_datapath"] for u in current}
+        info = file_list[0]
 
-        new_entries = []
-        for info in file_list:
-            src_datapath = info["datapath"]
-            if src_datapath in seen_srcs:
-                continue
+        atac_state.set({
+            "name": info["name"],
+            "path": info["datapath"],
+        })
 
-            new_entries.append({
-                "id": uuid4().hex,
-                "name": info["name"],
-                "src_datapath": src_datapath,
-                "path": src_datapath,
-            })
-
-        if new_entries:
-            atac_uploads_state.set(current + new_entries)
+        print(f"[ATAC] staged upload: {info['name']} @ {info['datapath']}", flush=True)
 
 
+    @reactive.Effect
+    def _force_bass_checked():
+        tools = list(input.tools() or [])
+        if "bass" not in tools:
+            tools.insert(0, "bass")
+            ui.update_checkbox_group("tools", selected=tools)
+
+    def get_point_size(default=10):
+        try:
+            return float(input.point_size())
+        except Exception:
+            return default
 
     @output
     @render.ui
@@ -281,6 +485,94 @@ def server(input, output, session):
         choices = {u["id"]: f"{u['name']} ({u['id'][:6]})" for u in ups}
         selected = ups[-1]["id"]   
         return ui.input_select("active_upload", "Active dataset:", choices, selected=selected)
+
+
+    @output
+    @render.ui
+    def legend_ui():
+        a = adata()
+        if a is None:
+            return ui.div("No data.")
+
+        try:
+            color_by = input.color_by()
+        except Exception:
+            return ui.div()
+
+        if not color_by or color_by not in a.obs.columns:
+            return ui.div("No legend.")
+
+        s = a.obs[color_by]
+        if not (s.dtype.name == "category" or s.dtype == object):
+            return ui.div("Legend only for categorical columns.")
+
+        cats, categories, codes, colors = categorical_colors(s)
+
+        items = []
+        for label, col in zip(categories, colors):
+            items.append(
+                ui.div(
+                    ui.span(
+                        style=(
+                            "display:inline-block;width:10px;height:10px;"
+                            f"border-radius:50%;background:{col};margin-right:8px;"
+                        )
+                    ),
+                    ui.span(str(label)),
+                    style="display:flex;align-items:center;margin:4px 0;"
+                )
+            )
+
+        return ui.div(
+            *items,
+            style="max-height: 480px; overflow-y: auto; padding-right: 6px;"
+        )
+
+
+
+    @output
+    @render.ui
+    def multiomics_upload_ui():
+        try:
+            enabled = bool(input.do_multiomics())
+        except Exception:
+            enabled = False
+
+        if not enabled:
+            return ui.div()  
+
+        return ui.TagList(
+            ui.input_file(
+                "file_rna_assay",
+                "Upload RNA_Assay (.h5ad)",
+                multiple=False,
+                accept=[".h5ad"],
+            ),
+            ui.input_file(
+                "file_atac",
+                "Upload ATAC (.h5ad)",
+                multiple=False,
+                accept=[".h5ad"],
+            ),
+        )
+
+    @output
+    @render.ui
+    def visium_upload_ui():
+        try:
+            if bool(input.do_multiomics()):
+                return ui.div()  
+        except Exception:
+            pass
+
+        return ui.input_file(
+            "file",
+            "Upload a spatial dataset (.h5ad)",
+            multiple=True,
+            accept=[".h5ad"],
+        )
+
+
 
     @reactive.Calc
     def active_adata_path():
@@ -302,11 +594,28 @@ def server(input, output, session):
     @reactive.Calc
     def adata():
         res = tools_result.get()
-        combined = res.get("_combined_h5ad") if isinstance(res, dict) else None
 
+        # 1) If a combined file exists, this is the best option
+        combined = res.get("_combined_h5ad") if isinstance(res, dict) else None
         if combined and Path(combined).exists():
             return sc.read_h5ad(combined)
+        
+        # 2) If multiomics integration was done, use that
+        integrated = res.get("_integrated_h5ad") if isinstance(res, dict) else None
+        if integrated and Path(integrated).exists():
+            return sc.read_h5ad(integrated)
 
+        # 2.5) Multiomics preview (before integration)
+        try:
+            if bool(input.do_multiomics()):
+                rna_info = rna_assay_state.get()
+                if rna_info and Path(rna_info["path"]).exists():
+                    return sc.read_h5ad(rna_info["path"])
+        except Exception:
+            pass
+
+
+        # 3) Fallback to active upload or demo
         path = active_adata_path()
         if path == DEMO_PATH:
             return demo_adata
@@ -327,6 +636,7 @@ def server(input, output, session):
             "stlearn": str((csv_dir / "stlearn.csv").resolve()),
             "bayesspace": str((csv_dir / "bayesspace.csv").resolve()),
             "bass": str((csv_dir / "bass.csv").resolve()),
+            "ensemble": str((csv_dir / "ensemble.csv").resolve()),
         }
 
         cmds = {
@@ -358,11 +668,16 @@ def server(input, output, session):
                 "Rscript", "tools/t_bayesspace.R",
                 str(r_input_dir), outputs["bayesspace"], "True"
             ],
+            "ensemble": [
+                "micromamba", "run", "-n", "sdd_metrics",   
+                "python", "-m", "ensemble_method.ensemble_main",
+                "--input_csvs", str(csv_dir),
+            ],
         }
 
         cmd = cmds[tool_key]
 
-        if n_clusters is not None and tool_key in ("scanit", "graphst", "stlearn"):
+        if n_clusters is not None and tool_key in ("scanit", "graphst", "stlearn", "ensemble"):
             cmd += ["--k_clusters", str(n_clusters)]
 
         if tool_key == "bayesspace" and n_clusters is not None:
@@ -422,7 +737,10 @@ def server(input, output, session):
             tools_result.set({"error": {"ok": False, "error": "No dataset loaded."}})
             return
 
-        selected = input.tools() or []
+        selected = list(input.tools() or [])
+        if "bass" not in selected:
+            selected.insert(0, "bass") 
+
 
         if not selected:
             tools_result.set({})
@@ -435,46 +753,113 @@ def server(input, output, session):
 
         upload_visium_dir = run_dir / "upload_visium"
         upload_visium_dir.mkdir(parents=True, exist_ok=True)
-
-        upload_atac_dir = run_dir / "upload_atac"
-        upload_atac_dir.mkdir(parents=True, exist_ok=True)
         
         csv_dir = run_dir / "csv"
         csv_dir.mkdir(parents=True, exist_ok=True)
 
         metrics_dir = run_dir / "metrics"
         metrics_dir.mkdir(parents=True, exist_ok=True)
+        
+        multiomics_upload_dir = run_dir / "multiomics_uploads"
+        multiomics_upload_dir.mkdir(parents=True, exist_ok=True)
 
         project_root = Path(__file__).resolve().parents[1]
+        # -----------------------
+        # Multiomics (optional) 
+        # -----------------------
 
-        src_path = active_adata_path() or DEMO_PATH
-        src = Path(src_path)
+        try:
+            do_multiomics = bool(input.do_multiomics())
+        except Exception:
+            do_multiomics = False
 
-        if src_path == DEMO_PATH:
-            src = (project_root / DEMO_PATH).resolve()
+        # -----------------------
+        # Choose the tool input file (adata_path)
+        # -----------------------
+
+        if do_multiomics:
+            # Multi-omics mode: build an integrated h5ad and run ALL tools on it
+            rna_info = rna_assay_state.get()
+            atac_info = atac_state.get()
+
+            if not rna_info or not atac_info:
+                results["_multiomics"] = {
+                    "ok": False,
+                    "error": "Multi-omics enabled, but RNA_Assay or ATAC upload is missing.",
+                }
+                tools_result.set(results)
+                return
+
+            multiomics_out = run_dir / "multiomics_output"
+            multiomics_out.mkdir(parents=True, exist_ok=True)
+
+            rna_dst = multiomics_upload_dir / "rna_assay.h5ad"
+            atac_dst = multiomics_upload_dir / "atac.h5ad"
+            shutil.copy2(rna_info["path"], rna_dst)
+            shutil.copy2(atac_info["path"], atac_dst)
+
+            # Copy inputs into the run folder (keeps runs reproducible)
+
+            integrated_h5ad = multiomics_out / "integrated_multiomics.h5ad"
+
+            results["_multiomics"] = run_multiomics_integration(
+                rna_h5ad=str(rna_dst),
+                atac_h5ad=str(atac_dst),
+                tmp_dir=multiomics_out,
+                out_h5ad=integrated_h5ad,
+            )
+
+            if not results["_multiomics"].get("ok"):
+                tools_result.set(results)
+                return
+
+            # From here on, ALL tools run on the integrated file
+            adata_path = str(integrated_h5ad)
+
+            # Put the integrated file into upload_visium_dir so metrics can read it from that folder
+            try:
+                shutil.copy2(adata_path, upload_visium_dir / Path(adata_path).name)
+            except Exception:
+                pass
+
+            results["_multiomics_upload_dir"] = str(multiomics_upload_dir)
+            results["_rna_assay_h5ad"] = str(rna_dst)
+            results["_atac_h5ad"] = str(atac_dst)
+            results["_integrated_h5ad"] = adata_path
+
         else:
-            src = src.resolve()
+            # Single-omics mode: tools run on the selected Visium (or demo) dataset
+            src_path = active_adata_path() or DEMO_PATH
+            src = Path(src_path)
 
-        dst = upload_visium_dir / src.name
-        shutil.copy2(src, dst)
-        adata_path = str(dst)
+            if src_path == DEMO_PATH:
+                src = (project_root / DEMO_PATH).resolve()
+            else:
+                src = src.resolve()
 
-        # --- copy ATAC upload (optional) into upload_atac_dir ---
-        atac_path = None
-        atac_ups = atac_uploads_state.get()
+            dst = upload_visium_dir / src.name
+            shutil.copy2(src, dst)
+            adata_path = str(dst)
 
-        if atac_ups:
-            atac_src_path = atac_ups[-1]["path"]
-            atac_src = Path(atac_src_path).resolve()
+        # -----------------------
+        # Ground truth export (optional, BEFORE tools)
+        # -----------------------
+        gt_col = None
+        try:
+            gt_col = input.gt_col()
+        except Exception:
+            gt_col = None
 
-            atac_dst = upload_atac_dir / atac_src.name
-            shutil.copy2(atac_src, atac_dst)
-            atac_path = str(atac_dst)
+        if gt_col and gt_col != "__none__":
+            results["_groundtruth"] = run_groundtruth_export(
+                adata_path=adata_path,
+                csv_dir=csv_dir,
+                gt_col=gt_col,
+            )
+        else:
+            results["_groundtruth"] = {"ok": False, "skipped": True, "reason": "no ground truth selected"}
 
-        # helpful for debugging / downstream use
-        results["_upload_visium_dir"] = str(upload_visium_dir)
-        results["_upload_atac_dir"] = str(upload_atac_dir)
-        results["_atac_h5ad"] = atac_path
+
 
 
 
@@ -512,19 +897,18 @@ def server(input, output, session):
                 return
 
         # 1) Run Bass first to get n_clusters if Bass is selected
-        if "bass" in selected:
-            results["bass"] = run_tool("bass", adata_path, csv_dir, r_input_dir, n_clusters=None)
+        results["bass"] = run_tool("bass", adata_path, csv_dir, r_input_dir, n_clusters=None)
 
-            n_clusters = read_bass_n_clusters(csv_dir)
-            results["_bass_n_clusters"] = {
-                "ok": n_clusters is not None,
-                "value": n_clusters,
-                "path": str((csv_dir / "bass_n_clusters.txt").resolve()),
-            }
+        n_clusters = read_bass_n_clusters(csv_dir)
+        results["_bass_n_clusters"] = {
+            "ok": n_clusters is not None,
+            "value": n_clusters,
+            "path": str((csv_dir / "bass_n_clusters.txt").resolve()),
+        }
 
         # 2) Run other selected tools with n_clusters if available
         for tool_key in selected:
-            if tool_key == "bass":
+            if tool_key in ("bass", "ensemble"):
                 continue
 
             if tool_key not in ("scanit", "graphst", "stlearn", "bayesspace"):
@@ -532,6 +916,9 @@ def server(input, output, session):
                 continue
 
             results[tool_key] = run_tool(tool_key, adata_path, csv_dir, r_input_dir, n_clusters=n_clusters)
+
+        if "ensemble" in selected:
+            results["ensemble"] = run_tool("ensemble", adata_path, csv_dir, r_input_dir, n_clusters=n_clusters)
 
 
         combined_path = run_dir / "combined.h5ad"
@@ -795,8 +1182,20 @@ def server(input, output, session):
                 "Check that the demo dataset can be loaded, or upload a .h5ad file."
             )
 
-        file_list = input.file()
-        source = "Uploaded dataset" if file_list else f"Demo dataset ({DEMO_PATH})"
+        try:
+            if bool(input.do_multiomics()):
+                rna_info = rna_assay_state.get()
+                atac_info = atac_state.get()
+                if rna_info and atac_info:
+                    source = f"Multi-omics: RNA={Path(rna_info['name']).name}, ATAC={Path(atac_info['name']).name}"
+                else:
+                    source = "Multi-omics: waiting for uploads"
+            else:
+                file_list = input.file()
+                source = "Uploaded dataset" if file_list else f"Demo dataset ({DEMO_PATH})"
+        except Exception:
+            source = f"Demo dataset ({DEMO_PATH})"
+
 
         return (
             f"{source}\n"
@@ -815,11 +1214,35 @@ def server(input, output, session):
 
         fig, ax = plt.subplots(figsize=(5, 5))
 
+        pt = get_point_size(default=12)
+
+
+        # ---- morphology background (optional) ----
+        show_img = False
+        try:
+            show_img = bool(input.show_morphology())
+        except Exception:
+            show_img = False
+
+        img_key = "hires"
+        try:
+            img_key = input.morphology_key()
+        except Exception:
+            pass
+
+        if show_img:
+            img, extent = get_morphology_image(a, img_key=img_key)
+            if img is not None:
+                if extent is not None:
+                    ax.imshow(img, extent=extent, origin="upper")
+                else:
+                    ax.imshow(img, origin="upper")
+
         if col in a.obs.columns:
             s = a.obs[col]
             cats = s.astype("category")
             codes = cats.cat.codes.to_numpy()
-            sc_plt = ax.scatter(x, y, c=codes, s=12, alpha=0.9)
+            sc_plt = ax.scatter(x, y, c=codes, s=pt, alpha=0.9)
 
             handles = []
             max_code = codes.max() if codes.size else 0
@@ -911,35 +1334,43 @@ def server(input, output, session):
 
         fig, ax = plt.subplots(figsize=(5, 5))
 
+        pt = get_point_size(default=12)
+
+        # ---- morphology background (optional) ----
+        show_img = False
+        try:
+            show_img = bool(input.show_morphology())
+        except Exception:
+            show_img = False
+
+        img_key = "hires"
+        try:
+            img_key = input.morphology_key()
+        except Exception:
+            pass
+
+        if show_img:
+            img, extent = get_morphology_image(a, img_key=img_key)
+            if img is not None:
+                if extent is not None:
+                    ax.imshow(img, extent=extent, origin="upper")
+                else:
+                    ax.imshow(img, origin="upper")
+
         if color_by and color_by in a.obs.columns:
             s = a.obs[color_by]
 
             if s.dtype.name == "category" or s.dtype == object:
-                categories = s.astype("category")
-                codes = categories.cat.codes.to_numpy()
-                sc_plt = ax.scatter(x, y, c=codes, s=10, alpha=0.85)
-
-                handles = []
-                max_code = codes.max() if codes.size else 0
-                for cat_value in categories.cat.categories:
-                    idxs = np.where(categories.to_numpy() == cat_value)[0]
-                    if len(idxs) == 0:
-                        continue
-                    idx = idxs[0]
-                    norm_value = codes[idx] / max_code if max_code > 0 else 0
-                    color = sc_plt.cmap(norm_value)
-                    handles.append(
-                        plt.Line2D([], [], marker="o", color=color, linestyle="",
-                                   label=str(cat_value), markersize=6)
-                    )
-
-                ax.legend(handles=handles, title=color_by, bbox_to_anchor=(1.05, 1), loc="upper left")
+                cats, categories, codes, colors = categorical_colors(s)
+                # codes direkt mappen auf discrete cmap
+                cmap = mcolors.ListedColormap(colors)
+                ax.scatter(x, y, c=codes, s=pt, alpha=0.85, cmap=cmap, vmin=-0.5, vmax=len(colors)-0.5)
             else:
-                sc_plt = ax.scatter(x, y, c=s.to_numpy(), s=10, alpha=0.85)
+                sc_plt = ax.scatter(x, y, c=s.to_numpy(), s=pt, alpha=0.85)
                 cbar = plt.colorbar(sc_plt, ax=ax)
                 cbar.set_label(color_by)
         else:
-            ax.scatter(x, y, s=10, alpha=0.85)
+            ax.scatter(x, y, s=pt, alpha=0.85)
 
         ax.set_xlabel("x")
         ax.set_ylabel("y")
@@ -1063,6 +1494,31 @@ def server(input, output, session):
         fig = plot_spatial_clusters(a, "bass", "BASS clusters")
         if fig is not None:
             return fig
+
+    # -----------------------
+    # Ensemble result plotting
+    # -----------------------
+    @output
+    @render.text
+    def ensemble_plot_info():
+        a = adata()
+        if a is None:
+            return "No data loaded."
+        if "spatial" not in a.obsm:
+            return "No spatial coordinates."
+        if "ensemble" not in a.obs.columns:
+            return "No Ensemble result yet (obs['ensemble'] missing). Run Ensemble first."
+        return "Showing Ensemble clusters (obs['ensemble'])."
+
+
+    @output
+    @render.plot
+    def ensemble_plot():
+        a = adata()
+        fig = plot_spatial_clusters(a, "ensemble", "Ensemble clusters")
+        if fig is not None:
+            return fig
+
 
 
 app = App(app_ui, server)

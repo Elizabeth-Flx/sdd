@@ -216,7 +216,6 @@ def plot_means_lineplot(mean_df, title, save_path = None):
 
     p = (
         ggplot(df_long, aes(x="Method", y="Mean_Score", color="Metric", group="Metric"))
-        + geom_line(size=1)
         + geom_point(size=2)
         + ggtitle(title)
         + xlab("Method")

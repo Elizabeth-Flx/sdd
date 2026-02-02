@@ -5,6 +5,15 @@ import scipy.sparse as sp
 
 def create_csvs(adata_path, csv_dir="../files/csv/"):
     adata = sc.read_h5ad(adata_path)
+
+    # Add rownames and colnames if missing based on centroid_y and centroid_x
+    try:
+        adata.obs['array_row'] = adata.obs['centroid_y']
+        adata.obs['array_col'] = adata.obs['centroid_x']
+    except KeyError:
+        pass
+
+
     X = adata.X
     
     if sp.issparse(X):

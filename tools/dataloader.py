@@ -74,4 +74,28 @@ def save_cluster(output_path, adata, index_name):
         "barcode": adata.obs_names,
         "spatial_cluster": adata.obs[index_name]
     })
+    # Get unique clusters and create a mapping 1..n
+    unique_clusters = clusters["spatial_cluster"].unique()
+
+    cluster_map = {
+        old: new
+        for new, old in enumerate(unique_clusters, start=1)
+    }
+
+    # Remap clusters
+    clusters["spatial_cluster"] = clusters["spatial_cluster"].map(cluster_map)
+
+    # Save
     clusters.to_csv(output_path, index=False)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Save ground truth clusters from an AnnData file.")
+
+    parser.add_argument("--input", type=str, required=True, help="Input anndata file")
+    parser.add_argument("--output", type=str, required=True, help="Output csv file")
+    parser.add_argument("--index_name", type=str, required=True, help="Index name in adata.obs for clusters")
+
+    args = parser.parse_args()
+
+    adata = open_anndata(args.input)
+    save_cluster(args.output, adata, args.index_name)

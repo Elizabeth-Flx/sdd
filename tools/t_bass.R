@@ -46,7 +46,9 @@ BASS_obj <- BASS.run(BASS_obj)
 BASS_obj <- BASS.postprocess(BASS_obj)
 
 domains <- BASS_obj@results$z[[1]]   # spatial domain labels
-colData$spatial_cluster <- domains
+
+domains_new <- as.integer(factor(domains, levels = sort(unique(domains))))
+colData$spatial_cluster <- domains_new
 
 print(length(unique(domains)))
 
