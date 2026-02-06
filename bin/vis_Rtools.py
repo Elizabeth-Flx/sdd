@@ -62,7 +62,27 @@ def plot_umap_from_obs(adata, out_path, name, cluster_key):
     out_file: str = f"{out_path}/umap_{name}.png"
     sc.pp.neighbors(adata, use_rep='X')
     sc.tl.umap(adata)  # pyright: ignore[reportCallIssue]
-    figs = sc.pl.umap(adata, color=str(cluster_key), show=False, return_fig=True)
+    # Get unique clusters and generate a palette
+    if cluster_key in adata.obs:
+        unique_clusters = adata.obs[cluster_key].astype(str).unique()
+        n_clusters = len(unique_clusters)
+        # Use seaborn to generate a palette with enough colors
+        palette = sns.color_palette("tab20", n_colors=min(n_clusters, 20))
+        if n_clusters > 20:
+            # Use husl for more than 20 clusters
+            palette = sns.color_palette("husl", n_colors=n_clusters)
+        # Map cluster labels to colors
+        lut = dict(zip(unique_clusters, palette))
+        colors = adata.obs[cluster_key].astype(str).map(lut)
+        figs = sc.pl.umap(
+            adata,
+            color=str(cluster_key),
+            show=False,
+            return_fig=True,
+            palette=palette if n_clusters <= 20 else lut
+        )
+    else:
+        figs = sc.pl.umap(adata, color=str(cluster_key), show=False, return_fig=True)
     if isinstance(figs, list):
         fig = figs[0]
     else:
@@ -181,6 +201,8 @@ def main():
         name = "atac"
     elif "rna" in args.h5ad.lower():
         name = "rna_atac"
+    elif "ensemble" in args.csv.lower():
+        name = "ensemble"
     else:
         name = "sp"
 
@@ -210,7 +232,7 @@ def main():
     plot_spatial(adata, y_sp, args.output_dir, name)
 
     # Cell-gene heatmaps (top 50 genes)
-    plot_cell_gene_heatmap(adata, y_sp, out_path=args.output_dir, name=name, cluster_rows=False, cluster_cols=True, max_genes=50)
+    # plot_cell_gene_heatmap(adata, y_sp, out_path=args.output_dir, name=name, cluster_rows=False, cluster_cols=True, max_genes=50)
 
 
 if __name__ == '__main__':

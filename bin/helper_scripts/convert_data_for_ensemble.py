@@ -29,7 +29,7 @@ def get_cluster_label_csv (csv_path, cluster_key, out_path):
     cluster_labels = df[cluster_key]
     out_df = pd.DataFrame({ "spatial_cluster": cluster_labels })
     # Write without column name or index or header
-    out_df.to_csv(out_path, index=False, header=False)
+    out_df.to_csv(out_path, index=True, header=True)
 
 def get_cluster_label_h5ad (h5ad_path, cluster_key, out_path):
     ad = sc.read_h5ad(h5ad_path)
@@ -38,7 +38,7 @@ def get_cluster_label_h5ad (h5ad_path, cluster_key, out_path):
     cluster_labels = ad.obs[cluster_key]
     out_df = pd.DataFrame({ "spatial_cluster": cluster_labels })
     # Write without column name or index or header
-    out_df.to_csv(out_path, index=False, header=False)
+    out_df.to_csv(out_path, index=True, header=True)
 
 
 def convert_data_for_ensemble(input_dir, output_dir):

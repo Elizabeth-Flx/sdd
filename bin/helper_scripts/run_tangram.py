@@ -56,6 +56,7 @@ def run_tangram(ad_rna, ad_sp, ad_atac_genes):
     tg.project_cell_annotations(ad_map_sub, ad_ge, "celltype")
     ad_ge.obsm['spatial'] = ad_sp.obsm['spatial']
     annotation_list = list(pd.unique(ad_rna.obs['celltype']))
+    ad_ge.obs["tangram_celltype"] = ad_ge.obsm["tangram_ct_pred"].idxmax(axis=1)
 
     return ad_ge, annotation_list
 

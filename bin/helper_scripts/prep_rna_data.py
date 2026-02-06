@@ -4,8 +4,8 @@ import tangram as tg
 import pandas as pd
 import os
 
-sp_ad = sc.read_h5ad('../data/shareseq/c_sp_ad.h5ad')
-sc_ad = sc.read_h5ad('../data/shareseq/c_sc_ad.h5ad')
+sp_ad = sc.read_h5ad('data/shareseq/c_sp_ad.h5ad')
+sc_ad = sc.read_h5ad('data/shareseq/c_sc_ad.h5ad')
 
 tg.pp_adatas(sc_ad, sp_ad, genes=sc_ad.var_names)
 
@@ -35,8 +35,8 @@ ad_ge = tg.project_genes(ad_map_sub, ad_sc_sub)
 
 tg.project_cell_annotations(ad_map_sub, ad_ge, "celltype")
 ad_ge.obsm['spatial'] = sp_ad.obsm['spatial']
-
+ad_ge.obs["tangram_celltype"] = ad_ge.obsm["tangram_ct_pred"].idxmax(axis=1)
 
 # Create path object for saving
-path = Path('../data/tangram_output')
+path = Path('data/tangram_output_new')
 ad_ge.write_h5ad(path / 'sp_rna.h5ad')
